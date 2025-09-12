@@ -1,0 +1,39 @@
+[general]
+name=Precision Zones
+qgisMinimumVersion=3.34
+qgisMaximumVersion=3.99
+version=1.0.0
+category=Analysis
+icon=icon.png
+author=Derlei Melo, Isabella Cunha, Lucas Amaral (FEAGRI/UNICAMP)
+email=derleiengagro@gmail.com
+license=GPL-2.0-or-later
+
+# Short, one-line summary shown in the Plugins manager
+description=Create management zones from rasters using PCA and K-Means (Elbow), with resampling, variance-reduction analysis, optional zone smoothing (Mode Filter), and rich CSV/PNG exports.
+
+# Longer text (can be multi-line)
+about=Features:
+ - Resampling & raster value extraction inside a boundary.
+ - PCA with explained variance table and CSV export.
+ - K-Means clustering with Elbow plot; export indices; generate zones as a raster.
+ - Optional zone smoothing (Mode Filter): SAGA Majority/Minority.
+ - Variance Reduction analysis from zones and external points CSV; per-zone statistics and boxplots (PNG).
+
+Requirements:
+ - Python packages: pandas, scikit-learn (optional: scipy).
+ - QGIS "Processing SAGA NextGen Provider" enabled.
+
+# Keep the keys below PRESENT but empty (no URLs yet)
+homepage=
+repository=
+tracker=
+
+# Space-separated or semicolon-separated tags
+tags=precision agriculture;management zones;PCA;K-Means;clustering;resampling;variance reduction;mode filter;SAGA;raster;analysis
+
+experimental=False
+deprecated=False
+
+[about]
+changelog=1.0.0: First public release (PCA, Elbow/K-Means, zone raster export, SAGA majority filter, variance reduction & boxplots; CSV/PNG exports).
