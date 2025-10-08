@@ -1,6 +1,6 @@
 # Precision Zones (QGIS Plugin)
 
-**Precision Zones** streamlines end-to-end **Management Zone** delineation in QGIS: raster preprocessing, value extraction, PCA, Elbow/K-Means analysis, zone raster generation, majority (mode) filtering with SAGA, and per-zone statistics including **Variance Reduction (VR%)** and **boxplots**.
+**Precision Zones** streamlines end-to-end **Management Zone** delineation in QGIS: raster preprocessing, value extraction, PCA, **Elbow/K-Means + Silhouette** analysis, zone raster generation, majority (mode) filtering with SAGA, and per-zone statistics including **Variance Reduction (VR%)** and **boxplots**.
 
 > UI language: **EN by default**. It switches to **PT-BR** automatically if your QGIS/system locale is Portuguese (or if you set `PZ_FORCE_LANG=pt` or `QSettings PrecisionZones/lang=pt*`).
 
@@ -26,9 +26,9 @@
   - Per-component and cumulative explained variance table.
   - Exportable **CSV** reports (loadings and variances).
 
-- **Elbow & K-Means (scikit-learn)**
-  - Elbow for **k = kmin…kmax** using either selected **PCs** or **original variables** (z-score).
-  - Export **PNG/CSV** for the Elbow plot and inertia table.
+- **Elbow, Silhouette & K-Means (scikit-learn)**
+  - Compute **Elbow (inertia)** and **Silhouette score** for **k = kmin…kmax** using either selected **PCs** or **original variables** (z-score).
+  - Export **PNG/CSV** for the combined **Elbow + Silhouette** plot and indices table.
 
 - **Zone raster generation**
   - K-Means clustering (PCs or originals).
@@ -53,7 +53,7 @@
 - **QGIS ≥ 3.34** (bundled Python 3.10+).
 - Python deps (in the same QGIS env):
   - `pandas` (tables I/O and cleaning)
-  - `scikit-learn` (PCA, StandardScaler, KMeans)
+  - `scikit-learn` (PCA, StandardScaler, KMeans, **Silhouette**)
   - `scipy` (optional; improves 95% CI and skewness; graceful fallback exists)
 - **SAGA provider** enabled in QGIS (for the majority filter).
 - GDAL/Processing are included with QGIS.
@@ -89,10 +89,10 @@
    - Inspect **explained variance** and **cumulative** variance.
    - Optionally **export** CSVs (loadings, variances).
 
-3. **Elbow (choose k)**
+3. **Elbow + Silhouette (choose k)**
    - Choose **PCA** (n PCs) **or Original variables (z-score)**.
-   - Set **k min** and **k max** → **Run Zones** (Elbow).
-   - Optionally **export** plot (PNG) and table (CSV).
+   - Set **k min** and **k max** → **Run Zones** (Elbow + Silhouette).
+   - Optionally **export** the combined plot (PNG) and indices table (CSV).
 
 4. **Generate zones**
    - Set **final k** and **PCs** (if using PCA) → **Generate Zones**.
@@ -116,7 +116,7 @@
 - **Outputs:**
   - `zonas_manejo_k{K}_{PCA|Orig}.tif` (UInt16, aligned to reference raster)
   - `variancia_pca.csv`, `componentes_pca.csv`
-  - `Elbow (… ).png`, `Elbow (… ).csv`
+  - `Elbow_Silhouette.png`, `Elbow_Silhouette.csv`
   - `per_zone_stats.csv` (includes total VR%) and `boxplots.png`
 
 ---
@@ -135,3 +135,4 @@ GPL-2.0-or-later
 
 ## Authors
 Derlei Melo; Isabella Cunha; Lucas Amaral
+
