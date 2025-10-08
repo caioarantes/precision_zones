@@ -14,7 +14,6 @@ from osgeo import gdal, osr
 import numpy as np
 import os
 
-
 # ---------------------------------- i18n (default EN; PT só se QGIS estiver em PT) ----------------------------------
 from qgis.PyQt.QtCore import QLocale, QSettings
 import os
@@ -231,7 +230,7 @@ class PrecisionZonesDialog(QDialog):
                                            "Export full report (CSV)"))
         self.pcaLayout.addWidget(self.exportButton)
 
-        # ---- NOVO: Exportar PCs como raster ----
+        # ---- Exportar PCs como raster ----
         self.pcaExportGroup = QGroupBox(tr("Exportar PCs como raster", "Export PCs as raster"))
         _pcaExpLay = QHBoxLayout(self.pcaExportGroup)
 
@@ -239,6 +238,7 @@ class PrecisionZonesDialog(QDialog):
         _pcaExpLay.addWidget(self.pcExportLabel)
 
         self.pcExportCombo = QComboBox()
+        self.pcExportCombo.setEnabled(False)  # habilita após PCA
         _pcaExpLay.addWidget(self.pcExportCombo)
 
         self.btnExportPCRaster = QPushButton(tr("Exportar PC selecionada (GeoTIFF)", "Export selected PC (GeoTIFF)"))
@@ -249,7 +249,7 @@ class PrecisionZonesDialog(QDialog):
 
         self.pcaLayout.addWidget(self.pcaExportGroup)
 
-        # Conexões dos botões novos
+        # Conexões dos botões de exportação
         self.btnExportPCRaster.clicked.connect(self._export_selected_pc_as_raster)
         self.btnExportAllPCRasters.clicked.connect(self._export_all_pcs_as_multiband)
 
@@ -307,8 +307,8 @@ class PrecisionZonesDialog(QDialog):
         self.clusterRangeLayout.addWidget(self.clusterMaxSpin)
 
         self.executarZonasButton = QPushButton(tr(
-            "Executar análise de zonas (KMeans + Elbow)",
-            "Run zones analysis (KMeans + Elbow)"
+            "Executar análise de zonas (KMeans + Elbow + Silhueta)",
+            "Run zones analysis (KMeans + Elbow + Silhouette)"
         ))
         self.zonasLayout.addWidget(self.executarZonasButton)
 
@@ -322,12 +322,12 @@ class PrecisionZonesDialog(QDialog):
         self.zonasLayout.addWidget(self.elbowCanvas)
         self.elbowAxes = self.elbowCanvas.figure.add_subplot(111)
 
-        self.exportElbowButton = QPushButton(tr("Exportar gráfico Elbow (PNG)",
-                                                "Export Elbow plot (PNG)"))
+        self.exportElbowButton = QPushButton(tr("Exportar gráfico (Elbow + Silhueta) [PNG]",
+                                                "Export plot (Elbow + Silhouette) [PNG]"))
         self.zonasLayout.addWidget(self.exportElbowButton)
 
-        self.exportZonasButton = QPushButton(tr("Exportar resultados (CSV)",
-                                                "Export results (CSV)"))
+        self.exportZonasButton = QPushButton(tr("Exportar resultados (Elbow + Silhueta) [CSV]",
+                                                "Export results (Elbow + Silhouette) [CSV]"))
         self.zonasLayout.addWidget(self.exportZonasButton)
 
         # Geração final (k escolhido)
@@ -377,7 +377,7 @@ class PrecisionZonesDialog(QDialog):
 
         # ===================== Aba Análises =====================
         self.analisesTab = QWidget()
-        self.tabs.addTab(self.analisesTab, tr("Análises", "Analyses"))
+        self.tabs.addTab(self.analisesTab, tr("Análises", "Analysis"))
 
         self.analisesLayout = QVBoxLayout(self.analisesTab)
 
@@ -478,15 +478,30 @@ class PrecisionZonesDialog(QDialog):
         # Mantido como placeholder caso precise no futuro
         pass
 
-    # ======== NOVO: utilidades para exportação das PCs ========
+    # ======== utilidades para exportação das PCs ========
     def popular_combo_pcs(self, n_components: int):
-        """Preenche os combos de PCs das abas PCA/Zonas."""
+        """
+        Preenche os combos após a PCA:
+          - pcExportCombo (aba PCA): 'PC1', 'PC2', ... (exportar PC única)
+          - pcSelector    (aba Zonas): 1..N (quantas PCs usar no clustering)
+        """
         try:
+            # Exportar PC única
             self.pcExportCombo.clear()
-            self.pcSelector.clear()
             for i in range(n_components):
-                self.pcExportCombo.addItem(f"PC{i+1}", i)  # dado = índice 0-based
-                self.pcSelector.addItem(str(i+1))
+                self.pcExportCombo.addItem(f"PC{i+1}", i)  # data = índice 0-based
+            self.pcExportCombo.setEnabled(self.pcExportCombo.count() > 0)
+            if self.pcExportCombo.count() > 0:
+                self.pcExportCombo.setCurrentIndex(0)
+
+            # Zonas (clustering): 1..N
+            self.pcSelector.clear()
+            for i in range(1, n_components + 1):
+                self.pcSelector.addItem(str(i))
+            # respeita o toggle do rádio PCA
+            self._toggle_pc_selector(self.radPCA.isChecked())
+            if self.pcSelector.count() > 0:
+                self.pcSelector.setCurrentIndex(0)
         except Exception:
             pass
 
@@ -589,7 +604,7 @@ class PrecisionZonesDialog(QDialog):
         ds.FlushCache()
         ds = None  # fecha
 
-    # ======== NOVO: ações dos botões de exportação ========
+    # ======== ações dos botões de exportação ========
     def _resolve_pca_scores(self):
         """
         Retorna (scores, n_components) buscando, nesta ordem:
@@ -785,3 +800,4 @@ class PrecisionZonesDialog(QDialog):
                                        "Multiband PCs GeoTIFF exported successfully."))
         except Exception as e:
             QMessageBox.critical(self, tr("Erro ao exportar", "Export error"), str(e))
+

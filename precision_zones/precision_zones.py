@@ -12,27 +12,16 @@ from qgis import processing
 from .precision_zones_dialog import PrecisionZonesDialog
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt import QtWidgets
-from qgis.PyQt.QtCore import Qt, QLocale, QSettings  # <- importa QSettings também
+from qgis.PyQt.QtCore import Qt, QLocale, QSettings
 import os
 import tempfile
 import uuid
 import numpy as np
+from osgeo import gdal  # para ler metadados do raster de referência
 
 
 # ---------------------------------- i18n (default EN; PT só se QGIS estiver em PT) ----------------------------------
-from qgis.PyQt.QtCore import QLocale, QSettings
-import os
-
 def _resolve_lang_is_pt() -> bool:
-    """
-    Retorna True SOMENTE quando:
-      - PZ_FORCE_LANG for 'pt*'  (força PT); ou
-      - Preferência do plugin (QSettings) for 'pt*'; ou
-      - QGIS estiver com Override e userLocale começando com 'pt'; ou
-      - Locale do sistema começar com 'pt'.
-    Em QUALQUER outro caso, retorna False (ou seja, usa EN).
-    """
-    # 1) Ambiente (override para testes)
     env = (os.environ.get("PZ_FORCE_LANG", "") or "").strip().lower()
     if env.startswith("pt"):
         return True
@@ -40,46 +29,53 @@ def _resolve_lang_is_pt() -> bool:
         return False
 
     s = QSettings()
-
-    # 2) Preferência opcional do plugin (se quiser expor no futuro)
     pref = (s.value("PrecisionZones/lang", "auto") or "auto").strip().lower()
     if pref.startswith("pt"):
         return True
     if pref.startswith("en"):
         return False
 
-    # 3) Idioma da UI do QGIS quando "Override system locale" está ativo
     override_raw = s.value("locale/overrideFlag", False)
     override = str(override_raw).strip().lower() in ("1", "true", "yes", "y")
     if override:
         ui_locale = (s.value("locale/userLocale", "") or "").strip().lower()
         return ui_locale.startswith("pt")
 
-    # 4) Fallback: apenas PT quando o sistema é PT; caso contrário, EN
     return QLocale().name().lower().startswith("pt")
 
 def tr(pt_br: str, en: str) -> str:
-    """Default EN; PT somente quando _resolve_lang_is_pt() for True."""
     return pt_br if _resolve_lang_is_pt() else en
 # ------------------------------------------------------------------------------------------------
 
 
-
 # ---------------------------------- Dependências Python (soft import) ----------------------------------
-# Não quebrar o carregamento do plugin se faltarem libs; deixamos o checklist orientar o usuário.
 try:
     import pandas as pd
 except Exception:
-    pd = None  # será verificado nos métodos
+    pd = None
 # -------------------------------------------------------------------------------------------------------
 
 
 def obter_raster_por_nome(nome):
-    """Retorna o QgsRasterLayer com o nome correspondente carregado no projeto."""
     for camada in QgsProject.instance().mapLayers().values():
         if isinstance(camada, QgsRasterLayer) and camada.name() == nome:
             return camada
     return None
+
+
+# ---------------------------------- Util: Silhueta para K-Means ----------------------------------
+def _silhouette_kmeans(X, labels, max_samples=10000, random_state=0):
+    try:
+        from sklearn.metrics import silhouette_score
+    except Exception:
+        return float("nan")
+    n = X.shape[0]
+    if n > max_samples:
+        rng = np.random.default_rng(random_state)
+        idx = rng.choice(n, size=max_samples, replace=False)
+        return float(silhouette_score(X[idx], labels[idx], metric="euclidean"))
+    else:
+        return float(silhouette_score(X, labels, metric="euclidean"))
 
 
 class PrecisionZonesPlugin:
@@ -88,19 +84,23 @@ class PrecisionZonesPlugin:
         self.dialog = None
         self.plugin_dir = os.path.dirname(__file__)
         self.dados_amostrados = None
-        self.pasta_exportacao = None  # pasta escolhida para saídas do usuário
+        self.pasta_exportacao = None
         self.referencia_raster = None
         self.vector_layers = {}
         self.raster_layers = {}
-        # metadados para nomes bonitos
+
+        # metadados que o dialog usa para exportar rasters
+        self.ref_gt = None
+        self.ref_crs_wkt = None
+        self.grid_shape = None  # (rows, cols)
+
+        # nomes bonitos / rastreio
         self._ultima_fonte_tag = None   # "PCA" ou "Orig"
         self._ultima_pcs = None         # int ou None
         self._ultimo_kminmax = None     # (kmin, kmax)
 
     # ---------------------------- Helpers de nome ----------------------------
-
     def _nome_base_zonas(self, k: int, fonte_tag: str, pcs: int | None) -> str:
-        """Ex.: 'Zonas (k=3, PCA, PCs=2)' ou 'Zonas (k=3, Orig)' / versão EN."""
         if fonte_tag == "PCA":
             pcs_txt = f", PCs={pcs}" if pcs else ""
             return tr(f"Zonas (k={k}, PCA{pcs_txt})", f"Zones (k={k}, PCA{pcs_txt})")
@@ -108,7 +108,6 @@ class PrecisionZonesPlugin:
             return tr(f"Zonas (k={k}, Orig)", f"Zones (k={k}, Orig)")
 
     def _nome_elbow(self) -> tuple[str, str]:
-        """Retorna (png_name, csv_name), com nomes localizados."""
         tag = self._ultima_fonte_tag or "Elbow"
         kmin, kmax = self._ultimo_kminmax if self._ultimo_kminmax else (None, None)
         pcs = self._ultima_pcs
@@ -124,14 +123,11 @@ class PrecisionZonesPlugin:
         return base + ".png", base + ".csv"
 
     def _stem_filename(self, title: str) -> str:
-        """Sanitiza para nome de arquivo, mantendo parênteses."""
         return title.replace("/", "-").replace(":", "-")
 
     # ---------------------------- GUI lifecycle ----------------------------
-
     def initGui(self):
         icon_path = os.path.join(self.plugin_dir, 'icon.png')
-        # Nome próprio do plugin SEMPRE em inglês
         self.action = QAction(QIcon(icon_path), "Precision Zones", self.iface.mainWindow())
         self.action.triggered.connect(self.run)
         self.iface.addToolBarIcon(self.action)
@@ -142,15 +138,10 @@ class PrecisionZonesPlugin:
         self.iface.removePluginMenu("Precision Zones", self.action)
 
     def run(self):
-       
-        self.dialog = PrecisionZonesDialog(None)   # sem parent, pode ir para trás ao clicar fora
-        self.dialog._plugin = self                 # ponte para o plugin (o dialog usa isso)
+        self.dialog = PrecisionZonesDialog(None)
+        self.dialog._plugin = self
         self.dialog.setModal(False)
         self.dialog.setAttribute(Qt.WA_DeleteOnClose, True)
-
-    
-
-
 
         # Conexões
         self.dialog.botaoCarregarCSV.clicked.connect(self.carregar_csv_variancia)
@@ -186,12 +177,7 @@ class PrecisionZonesPlugin:
         self.dialog.show()
 
     # --------------------- Util: limpeza de dados --------------------------
-
     def _limpar_dataframe(self, df):
-        """
-        Limpa NaN/Inf e valores sentinela típicos de NoData; dropa linhas com faltas
-        e remove colunas com variância zero. Retorna df limpo e reporta no message bar.
-        """
         if pd is None or df is None or getattr(df, "empty", True):
             return df
 
@@ -244,7 +230,6 @@ class PrecisionZonesPlugin:
         return df
 
     # --------------------- Reamostragem & Extração ------------------------
-
     def executar(self):
         if pd is None:
             QMessageBox.warning(
@@ -329,6 +314,18 @@ class PrecisionZonesPlugin:
                                      tr(f"Erro ao processar {raster.name()}: {str(e)}",
                                         f"Failed processing {raster.name()}: {str(e)}"))
                 return
+
+        # ---- Salva metadados de referência para o dialog (exportações) ----
+        if primeira_saida:
+            try:
+                ref_path = primeira_saida.dataProvider().dataSourceUri().split("|")[0]
+                ds = gdal.Open(ref_path)
+                if ds:
+                    self.ref_gt = ds.GetGeoTransform()
+                    self.ref_crs_wkt = ds.GetProjection()
+                    self.grid_shape = (ds.RasterYSize, ds.RasterXSize)
+            except Exception:
+                pass
 
         if primeira_saida:
             try:
@@ -422,7 +419,6 @@ class PrecisionZonesPlugin:
                 return
 
     # ------------------------------ PCA ------------------------------------
-
     def executar_pca(self):
         try:
             if pd is None:
@@ -436,7 +432,6 @@ class PrecisionZonesPlugin:
                 )
                 return
 
-            # scikit-learn: import local com aviso amigável
             try:
                 from sklearn.preprocessing import StandardScaler
                 from sklearn.decomposition import PCA
@@ -473,12 +468,14 @@ class PrecisionZonesPlugin:
                 return
 
             dados_padronizados = StandardScaler().fit_transform(dados)
-
             pca = PCA()
             componentes = pca.fit_transform(dados_padronizados)
-            self.pca_transformada = componentes
 
-            variancias = pca.explained_variance_ratio_ * 100
+            # Guarda para outras etapas/exportação
+            self.pca_transformada = componentes
+            self.pca_scores = componentes  # alias para o dialog
+
+            variancias = pca.explained_variance_ratio_ * 100.0
             acumulada = variancias.cumsum()
 
             self.dialog.pcaTable.setRowCount(len(variancias))
@@ -499,9 +496,10 @@ class PrecisionZonesPlugin:
                 "Acumulada (%)": acumulada
             })
 
-            self.dialog.pcSelector.clear()
-            for i in range(len(variancias)):
-                self.dialog.pcSelector.addItem(str(i + 1))
+            # ---- Preenche e habilita combos automaticamente ----
+            n_components = len(variancias)
+            if hasattr(self.dialog, "popular_combo_pcs"):
+                self.dialog.popular_combo_pcs(n_components)
 
             QMessageBox.information(self.dialog,
                                     tr("PCA concluída", "PCA finished"),
@@ -511,51 +509,13 @@ class PrecisionZonesPlugin:
         except Exception as e:
             QMessageBox.critical(self.dialog, tr("Erro na PCA", "PCA error"), str(e))
 
-    def selecionar_pasta_exportacao(self):
-        pasta = QtWidgets.QFileDialog.getExistingDirectory(
-            self.dialog, tr("Escolher pasta para salvar o relatório", "Choose a folder to save the report")
-        )
-        if pasta:
-            self.pasta_exportacao = pasta
-            self.dialog.exportPath.setText(pasta)
-        else:
-            self.dialog.exportPath.setText(tr("Nenhuma pasta selecionada", "No folder selected"))
-
-    def exportar_relatorio_pca(self):
-        if pd is None:
-            QMessageBox.warning(self.dialog, tr("Dependência ausente", "Missing dependency"),
-                                tr("Este recurso requer 'pandas'.", "This feature requires 'pandas'."))
-            return
-        if not hasattr(self, "relatorio_pca") or not hasattr(self, "variancia_explicada"):
-            QMessageBox.warning(self.dialog, tr("Erro", "Error"),
-                                tr("Execute a PCA antes de exportar.",
-                                   "Run PCA before exporting."))
-            return
-        if not self.pasta_exportacao:
-            QMessageBox.warning(self.dialog, tr("Erro", "Error"),
-                                tr("Escolha uma pasta para salvar o relatório.",
-                                   "Choose a folder to save the report."))
-            return
-
-        try:
-            variancia_path = os.path.join(self.pasta_exportacao, "variancia_pca.csv")
-            componentes_path = os.path.join(self.pasta_exportacao, "componentes_pca.csv")
-            self.variancia_explicada.to_csv(variancia_path, index=False)
-            self.relatorio_pca.to_csv(componentes_path)
-            QMessageBox.information(self.dialog, tr("Exportação concluída", "Export completed"),
-                                    tr(f"Relatórios salvos em:\n{self.pasta_exportacao}",
-                                       f"Reports saved to:\n{self.pasta_exportacao}"))
-        except Exception as e:
-            QMessageBox.critical(self.dialog, tr("Erro na exportação", "Export error"), str(e))
-
-    # -------------------- Elbow (PCA ou Originais) -------------------------
-
+    # -------------------- Elbow + Silhueta (PCA ou Originais) -------------------------
     def executar_zonas(self):
         try:
-            # scikit-learn: imports locais + mensagens amigáveis
             try:
                 from sklearn.cluster import KMeans
                 from sklearn.preprocessing import StandardScaler
+                from sklearn.metrics import silhouette_score
             except Exception:
                 QMessageBox.warning(
                     self.dialog,
@@ -598,6 +558,7 @@ class PrecisionZonesPlugin:
                                         tr("Execute a etapa de reamostragem/extração primeiro.",
                                            "Run the resampling/extraction step first."))
                     return
+                from sklearn.preprocessing import StandardScaler
                 dados = StandardScaler().fit_transform(self.matriz_variaveis_originais)
                 fonte_str = tr("Variáveis originais (z-score)", "Original variables (z-score)")
                 self._ultima_pcs = None
@@ -609,77 +570,106 @@ class PrecisionZonesPlugin:
 
             ks = list(range(k_min, k_max + 1))
             inercia = []
+            silhuetas = []
 
             for k in ks:
                 kmeans = KMeans(n_clusters=k, random_state=0, n_init=10)
                 kmeans.fit(dados)
                 inercia.append(kmeans.inertia_)
 
+                try:
+                    labels = kmeans.labels_
+                    s = silhouette_score(dados, labels) if len(np.unique(labels)) > 1 else float("nan")
+                except Exception:
+                    s = float("nan")
+                silhuetas.append(s)
+
             self.dialog.indicesTable.setRowCount(len(ks))
-            for i, (k, iner) in enumerate(zip(ks, inercia)):
+            self.dialog.indicesTable.setColumnCount(3)
+            self.dialog.indicesTable.setHorizontalHeaderLabels([
+                tr("k", "k"),
+                tr("Inércia", "Inertia"),
+                tr("Silhueta", "Silhouette"),
+            ])
+            for i, (k, iner, sil) in enumerate(zip(ks, inercia, silhuetas)):
                 self.dialog.indicesTable.setItem(i, 0, QtWidgets.QTableWidgetItem(str(k)))
                 self.dialog.indicesTable.setItem(i, 1, QtWidgets.QTableWidgetItem(f"{iner:.2f}"))
+                self.dialog.indicesTable.setItem(i, 2, QtWidgets.QTableWidgetItem("" if np.isnan(sil) else f"{sil:.4f}"))
 
-            self.tabela_elbow = pd.DataFrame({"Clusters": ks, "Inércia": inercia})
+            try:
+                hdr = self.dialog.indicesTable.horizontalHeader()
+                hdr.setStretchLastSection(True)
+                from qgis.PyQt.QtWidgets import QHeaderView
+                hdr.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+                hdr.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+                hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+            except Exception:
+                pass
+
+            self.tabela_elbow = pd.DataFrame({
+                "Clusters": ks,
+                "Inércia": inercia,
+                tr("Silhueta", "Silhouette"): silhuetas
+            })
+
             ax = self.dialog.elbowAxes
             ax.clear()
-            ax.plot(ks, inercia, marker='o')
-            ax.set_title(tr(f"Método Elbow – {fonte_str}", f"Elbow method – {fonte_str}"))
+
+            old_twin = getattr(self, "_elbowTwinAx", None)
+            if old_twin is not None:
+                try:
+                    old_twin.remove()
+                except Exception:
+                    pass
+                self._elbowTwinAx = None
+
+            l1, = ax.plot(ks, inercia, marker='o', label=tr("Inércia", "Inertia"))
             ax.set_xlabel(tr("Número de Clusters (k)", "Number of clusters (k)"))
             ax.set_ylabel(tr("Inércia", "Inertia"))
+            ax.set_title(tr(f"Elbow + Silhueta – {fonte_str}", f"Elbow + Silhouette – {fonte_str}"))
+
+            twin = ax.twinx()
+            self._elbowTwinAx = twin
+            twin.grid(False)
+            l2, = twin.plot(ks, silhuetas, marker='s', linestyle='--', color='red',
+                            label=tr("Silhueta", "Silhouette"))
+            twin.set_ylabel(tr("Silhueta (−1 a 1)", "Silhouette (−1 to 1)"))
+
+            ax.legend([l1, l2], [l1.get_label(), l2.get_label()], loc='best')
+
             self.dialog.elbowCanvas.draw()
 
-            QMessageBox.information(self.dialog,
-                                    tr("Análise concluída", "Analysis completed"),
-                                    tr("Análise de clusters por Elbow finalizada com sucesso.",
-                                       "Elbow cluster analysis finished successfully."))
+            QMessageBox.information(
+                self.dialog,
+                tr("Análise concluída", "Analysis completed"),
+                tr("Análise de clusters por Elbow + Silhueta finalizada com sucesso.",
+                   "Elbow + Silhouette analysis finished successfully.")
+            )
 
         except Exception as e:
             QMessageBox.critical(self.dialog, tr("Erro na análise de zonas", "Zones analysis error"), str(e))
 
-    def exportar_indices_zonas(self):
-        if pd is None:
-            QMessageBox.warning(self.dialog, tr("Dependência ausente", "Missing dependency"),
-                                tr("Este recurso requer 'pandas'.", "This feature requires 'pandas'."))
-            return
-        if not hasattr(self, "tabela_elbow"):
-            QMessageBox.warning(self.dialog, tr("Erro", "Error"),
-                                tr("Execute a análise de zonas antes de exportar.",
-                                   "Run zones analysis before exporting."))
-            return
-
-        pasta = QtWidgets.QFileDialog.getExistingDirectory(
-            self.dialog, tr("Escolher pasta para salvar os resultados", "Choose folder to save results")
-        )
-        if not pasta:
-            return
-
-        try:
-            png_name, csv_name = self._nome_elbow()
-            caminho_png = os.path.join(pasta, self._stem_filename(png_name))
-            self.dialog.elbowCanvas.figure.savefig(caminho_png)
-
-            caminho_csv = os.path.join(pasta, self._stem_filename(csv_name))
-            self.tabela_elbow.to_csv(caminho_csv, index=False)
-
-            QMessageBox.information(self.dialog,
-                                    tr("Exportação concluída", "Export completed"),
-                                    tr(f"Resultados salvos em:\n{caminho_png}\n{caminho_csv}",
-                                       f"Results saved to:\n{caminho_png}\n{caminho_csv}"))
-        except Exception as e:
-            QMessageBox.critical(self.dialog, tr("Erro na exportação", "Export error"), str(e))
-            
     def exportar_elbow_png(self):
         if not hasattr(self, "tabela_elbow"):
             QMessageBox.warning(self.dialog, tr("Erro", "Error"),
                                 tr("Execute a análise de zonas antes de exportar.",
                                    "Run zones analysis before exporting."))
             return
-        png_name, _ = self._nome_elbow()
-        sugestao = self._stem_filename(png_name)
+
+        tag = self._ultima_fonte_tag or "Orig"
+        kmin, kmax = self._ultimo_kminmax if self._ultimo_kminmax else (None, None)
+        pcs = self._ultima_pcs
+        if tag == "PCA" and pcs is not None:
+            base = tr(f"Índices (Elbow+Silhueta) – PCA (PCs={pcs}, k={kmin}-{kmax})",
+                      f"Indices (Elbow+Silhouette) – PCA (PCs={pcs}, k={kmin}-{kmax})")
+        else:
+            base = tr(f"Índices (Elbow+Silhueta) – Variáveis originais (z-score), k={kmin}-{kmax}",
+                      f"Indices (Elbow+Silhouette) – Original variables (z-score), k={kmin}-{kmax}")
+
+        sugestao = self._stem_filename(base + ".png")
         caminho, _ = QtWidgets.QFileDialog.getSaveFileName(
             self.dialog,
-            tr("Salvar gráfico Elbow", "Save Elbow plot"),
+            tr("Salvar gráfico (PNG)", "Save plot (PNG)"),
             sugestao,
             tr("PNG (*.png)", "PNG (*.png)")
         )
@@ -695,7 +685,6 @@ class PrecisionZonesPlugin:
         except Exception as e:
             QMessageBox.critical(self.dialog, tr("Erro na exportação", "Export error"), str(e))
 
-
     def exportar_elbow_csv(self):
         if pd is None:
             QMessageBox.warning(self.dialog, tr("Dependência ausente", "Missing dependency"),
@@ -706,8 +695,18 @@ class PrecisionZonesPlugin:
                                 tr("Execute a análise de zonas antes de exportar.",
                                    "Run zones analysis before exporting."))
             return
-        _, csv_name = self._nome_elbow()
-        sugestao = self._stem_filename(csv_name)
+
+        tag = self._ultima_fonte_tag or "Orig"
+        kmin, kmax = self._ultimo_kminmax if self._ultimo_kminmax else (None, None)
+        pcs = self._ultima_pcs
+        if tag == "PCA" and pcs is not None:
+            base = tr(f"Índices (Elbow+Silhueta) – PCA (PCs={pcs}, k={kmin}-{kmax})",
+                      f"Indices (Elbow+Silhouette) – PCA (PCs={pcs}, k={kmin}-{kmax})")
+        else:
+            base = tr(f"Índices (Elbow+Silhueta) – Variáveis originais (z-score), k={kmin}-{kmax}",
+                      f"Indices (Elbow+Silhouette) – Original variables (z-score), k={kmin}-{kmax}")
+
+        sugestao = self._stem_filename(base + ".csv")
         caminho, _ = QtWidgets.QFileDialog.getSaveFileName(
             self.dialog,
             tr("Salvar resultados (CSV)", "Save results (CSV)"),
@@ -725,13 +724,10 @@ class PrecisionZonesPlugin:
                                        f"Results saved to:\n{caminho}"))
         except Exception as e:
             QMessageBox.critical(self.dialog, tr("Erro na exportação", "Export error"), str(e))
-                
 
     # --------------------- Geração de Zonas Raster --------------------------
-
     def gerar_zonas_manejo(self):
         try:
-            # scikit-learn: imports locais + mensagens amigáveis
             try:
                 from sklearn.cluster import KMeans
                 from sklearn.preprocessing import StandardScaler
@@ -784,7 +780,7 @@ class PrecisionZonesPlugin:
             zonas = modelo.fit_predict(dados)
 
             df = self.dados_amostrados.copy()
-            df["Zona"] = zonas + 1  # 1..k
+            df["Zona"] = zonas + 1
 
             contorno_nome = self.dialog.vectorLayerCombo.currentText()
             if not contorno_nome:
@@ -802,6 +798,7 @@ class PrecisionZonesPlugin:
 
             feats = []
             for X, Y, Z in df[["X", "Y", "Zona"]].itertuples(index=False):
+                from qgis.core import QgsFeature, QgsGeometry, QgsPointXY
                 f = QgsFeature(mem_layer.fields())
                 f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(float(X), float(Y))))
                 f.setAttribute("Zona", int(Z))
@@ -867,7 +864,6 @@ class PrecisionZonesPlugin:
                     return
                 self.pasta_exportacao = pasta
 
-            # Nome do layer (localizado) e arquivo (mantém padrão anterior)
             layer_title = self._nome_base_zonas(n_zonas, modo_tag, pcs if use_pca else None)
             out_basename = f"zonas_manejo_k{n_zonas}_{modo_tag}.tif"
             out_path = os.path.join(self.pasta_exportacao, out_basename)
@@ -884,7 +880,7 @@ class PrecisionZonesPlugin:
                 'NODATA': 0,
                 'INIT': 0,
                 'INVERT': False,
-                'DATA_TYPE': 2,   # UInt16
+                'DATA_TYPE': 2,
                 'EXTRA': '',
                 'OUTPUT': out_path
             })
@@ -905,7 +901,7 @@ class PrecisionZonesPlugin:
         except Exception as e:
             QMessageBox.critical(self.dialog, tr("Erro ao gerar zonas", "Error generating zones"), str(e))
 
-   #---------------------------------------------------------------------------------
+    #---------------------------------------------------------------------------------
     def _saga_majority_id(self) -> str | None:
         from qgis.core import QgsApplication
         reg = QgsApplication.processingRegistry()
@@ -916,41 +912,38 @@ class PrecisionZonesPlugin:
         if reg.algorithmById('sagang:majorityfilter'):
             return 'sagang:majorityfilter'
         return None
-   
-   # --------------------------- Filtro Modal -------------------------------
+
+    # --------------------------- Filtro Modal -------------------------------
     def aplicar_filtro_modal(self):
         try:
-            # --- 0) Entrada e parâmetros ---
             nome_raster = self.dialog.rasterFiltroCombo.currentText().strip()
             raster = obter_raster_por_nome(nome_raster)
             if not raster or not raster.isValid():
                 raise Exception(tr("Raster não encontrado.", "Raster not found."))
             src_path = raster.dataProvider().dataSourceUri().split("|")[0]
 
-            raio = int(self.dialog.windowSizeSpin.value())  # raio em CÉLULAS (r=1 ~ 3x3)
+            raio = int(self.dialog.windowSizeSpin.value())
             threshold = float(getattr(self.dialog, "thresholdSpin", None).value()) if hasattr(self.dialog, "thresholdSpin") else 0.0
-            tipo = 0          # 0=Majority, 1=Minority
-            kernel_tipo = 1   # 1=Circle (0=Square)
+            tipo = 0
+            kernel_tipo = 1
 
             import os, tempfile, uuid, shutil
             import numpy as np
             from osgeo import gdal
             from qgis.core import QgsProcessingContext, QgsProcessingFeedback, QgsApplication
 
-            # Temp curto (evita problemas de caminho longo no Windows)
             base = os.path.join(tempfile.gettempdir(), "pzmod_" + uuid.uuid4().hex[:8])
             os.makedirs(base, exist_ok=True)
-            p_saga = os.path.join(base, "s")      # base sem extensão (SAGA decide)
-            p_tif  = os.path.join(base, "s.tif")  # GeoTIFF garantido
-            p_aln  = os.path.join(base, "a.tif")  # alinhado ao original
-            p_out  = os.path.join(base, "m.tif")  # saída final
+            p_saga = os.path.join(base, "s")
+            p_tif  = os.path.join(base, "s.tif")
+            p_aln  = os.path.join(base, "a.tif")
+            p_out  = os.path.join(base, "m.tif")
 
             context = QgsProcessingContext()
             context.setTransformContext(QgsProject.instance().transformContext())
             feedback = QgsProcessingFeedback()
             reg = QgsApplication.processingRegistry()
 
-            # --- 1) Detecta ID do SAGA ---
             if   reg.algorithmById('sagang:majorityminorityfilter'): saga_id = 'sagang:majorityminorityfilter'
             elif reg.algorithmById('saga:majorityfilter'):           saga_id = 'saga:majorityfilter'
             elif reg.algorithmById('sagang:majorityfilter'):         saga_id = 'sagang:majorityfilter'
@@ -958,7 +951,6 @@ class PrecisionZonesPlugin:
                 raise Exception(tr("SAGA não disponível. Ative o provedor SAGA em Processamento.",
                                    "SAGA not available. Enable the SAGA provider in Processing."))
 
-            # --- 2) Geometria/máscara do raster original ---
             dsA = gdal.Open(src_path)
             if dsA is None:
                 raise Exception(tr("Falha ao abrir o raster de entrada.", "Failed to open input raster."))
@@ -976,7 +968,6 @@ class PrecisionZonesPlugin:
             bandA = dsA.GetRasterBand(1)
             nodata = bandA.GetNoDataValue()
 
-            # Detecta 0 como “fundo” se não houver NoData
             zero_bg = False
             if nodata is None:
                 try:
@@ -985,7 +976,6 @@ class PrecisionZonesPlugin:
                 except Exception:
                     zero_bg = False
 
-            # --- 3) Executa SAGA (pode gerar .sdat/.sgrd) ---
             params = {
                 "INPUT": src_path,
                 "TYPE": tipo,
@@ -997,7 +987,6 @@ class PrecisionZonesPlugin:
             res = processing.run(saga_id, params, context=context, feedback=feedback)
             saga_res = res.get("RESULT", p_saga)
 
-            # Localiza arquivo gerado
             created = None
             for ext in (".tif", ".sdat", ".sgrd", ".img", ""):
                 p = saga_res if saga_res.lower().endswith(ext) else saga_res + ext
@@ -1007,7 +996,6 @@ class PrecisionZonesPlugin:
             if created is None:
                 raise Exception(tr("SAGA não gerou arquivo de saída.", "SAGA did not produce an output file."))
 
-            # Converte pra GeoTIFF se necessário
             def _valid(path):
                 try:
                     return gdal.Open(path) is not None
@@ -1022,7 +1010,7 @@ class PrecisionZonesPlugin:
                     "COPY_SUBDATASETS": False,
                     "OPTIONS": "",
                     "EXTRA": "",
-                    "DATA_TYPE": 0,         # mantém tipo
+                    "DATA_TYPE": 0,
                     "OUTPUT": p_tif
                 }, context=context, feedback=feedback)
                 saga_path = p_tif
@@ -1031,35 +1019,33 @@ class PrecisionZonesPlugin:
             if not _valid(saga_path):
                 raise Exception(tr("Saída do SAGA ilegível pelo GDAL.", "SAGA output unreadable by GDAL."))
 
-            # --- 4) Alinha à grade do original (robusto) ---
-            aligned_path = p_aln  # queremos terminar com este arquivo
+            aligned_path = p_aln
             ok = False
 
-            # 4A) Tenta via Processing (gdal:warpreproject)
             try:
                 res_warp = processing.run("gdal:warpreproject", {
                     "INPUT": saga_path,
                     "SOURCE_CRS": None,
                     "TARGET_CRS": raster.crs().authid(),
-                    "RESAMPLING": 0,  # Nearest (categorias)
+                    "RESAMPLING": 0,
                     "NODATA": nodata if nodata is not None else 0,
-                    "TARGET_RESOLUTION": None,  # controlaremos pelo -ts
+                    "TARGET_RESOLUTION": None,
                     "TARGET_EXTENT": extent_str,
                     "TARGET_EXTENT_CRS": raster.crs().authid(),
                     "MULTITHREADING": True,
-                    "DATA_TYPE": 2,   # UInt16
+                    "DATA_TYPE": 2,
                     "EXTRA": f"-tap -ts {width_px} {height_px}",
                     "OUTPUT": p_aln
                 }, context=context, feedback=feedback)
                 candidate = res_warp.get("OUTPUT", p_aln)
                 if candidate and os.path.exists(candidate):
                     if os.path.normpath(candidate) != os.path.normpath(p_aln):
+                        import shutil
                         shutil.copyfile(candidate, p_aln)
                     ok = _valid(p_aln)
             except Exception:
                 ok = False
 
-            # 4B) Fallback: GDAL API (gdal.Warp)
             if not ok:
                 try:
                     gdal.Warp(
@@ -1079,8 +1065,8 @@ class PrecisionZonesPlugin:
                 except Exception:
                     ok = False
 
-            # 4C) Último recurso: copia a saída do SAGA
             if not ok:
+                import shutil
                 shutil.copyfile(saga_path, p_aln)
 
             dsAligned = gdal.Open(p_aln)
@@ -1090,16 +1076,13 @@ class PrecisionZonesPlugin:
                 raise Exception(tr("Warp não criou o arquivo alinhado esperado (a.tif).",
                                    "Warp did not create expected aligned file (a.tif)."))
 
-            # --- 5) Máscara + leitura de arrays ---
-            dsA = gdal.Open(src_path)        # reabre original
-            dsB = gdal.Open(p_aln)           # alinhado
+            dsA = gdal.Open(src_path)
+            dsB = gdal.Open(p_aln)
             arrA = dsA.GetRasterBand(1).ReadAsArray()
             arrB = dsB.GetRasterBand(1).ReadAsArray()
 
-            # --- 5.1) Preservar IDs de zona iguais ao raster original ---
             preservar_ids = True
             if preservar_ids:
-                # Máscara para comparação: ignora fundo
                 if nodata is not None:
                     mask_cmp = (arrA != nodata); fundo_val = nodata
                 elif zero_bg:
@@ -1114,11 +1097,9 @@ class PrecisionZonesPlugin:
                     valsB = valsB[valsB != fundo_val]
 
                 if (valsA.size > 0) and (valsB.size > 0):
-                    # Áreas por rótulo no original (prioriza maiores)
                     areaA = {int(va): int((arrA[mask_cmp] == va).sum()) for va in valsA}
                     ordem_va = sorted(areaA.keys(), key=lambda v: areaA[v], reverse=True)
 
-                    # Sobreposição entre rótulos filtrados (vb) e originais (va)
                     overlap = {int(vb): {} for vb in valsB}
                     for vb in valsB:
                         m_vb = (arrB == vb) & mask_cmp
@@ -1127,7 +1108,6 @@ class PrecisionZonesPlugin:
                         for va in valsA:
                             overlap[int(vb)][int(va)] = int(((arrA == va) & m_vb).sum())
 
-                    # Mapeamento greedy vb->va
                     usados_vb = set()
                     map_vb_to_va = {}
                     for va in ordem_va:
@@ -1142,14 +1122,12 @@ class PrecisionZonesPlugin:
                             map_vb_to_va[melhor_vb] = int(va)
                             usados_vb.add(melhor_vb)
 
-                    # Aplica remapeamento
                     if map_vb_to_va:
                         arrB_mapped = arrB.copy()
                         for vb, va in map_vb_to_va.items():
                             arrB_mapped[arrB == vb] = va
                         arrB = arrB_mapped
 
-            # --- 5.2) Aplica máscara (preserva borda/fundo do original) ---
             if nodata is not None:
                 valid = (arrA != nodata); nd_out = nodata
             elif zero_bg:
@@ -1159,7 +1137,6 @@ class PrecisionZonesPlugin:
 
             out_arr = arrB if valid is None else np.where(valid, arrB, arrA)
 
-            # --- 5.3) Grava GeoTIFF final ---
             drv = gdal.GetDriverByName("GTiff")
             out_ds = drv.Create(p_out, width_px, height_px, 1, gdal.GDT_UInt16,
                                 options=["COMPRESS=LZW", "TILED=YES"])
@@ -1172,14 +1149,12 @@ class PrecisionZonesPlugin:
             out_band.FlushCache(); out_ds.FlushCache()
             out_ds = None; dsB = None; dsA = None
 
-            # --- 6) Carrega a saída final ---
             layer_name = tr(f"{raster.name()} – maioria (r={raio})",
                             f"{raster.name()} – majority (r={raio})")
             out_layer = QgsRasterLayer(p_out, layer_name, "gdal")
             if not out_layer.isValid():
                 raise Exception(tr("Saída inválida/ilegível.", "Invalid/unreadable output."))
 
-            # Clona simbologia da camada original (cores/legenda iguais)
             try:
                 out_layer.setRenderer(raster.renderer().clone())
                 if nodata is not None:
@@ -1206,7 +1181,6 @@ class PrecisionZonesPlugin:
             )
 
     # -------------------- Análises: Redução de Variância --------------------
-
     def carregar_csv_variancia(self):
         if pd is None:
             QMessageBox.warning(
@@ -1255,7 +1229,6 @@ class PrecisionZonesPlugin:
         from qgis.PyQt import QtWidgets
         import math
 
-        # ----- Helpers (IC95% e Skew) com fallback sem SciPy -----
         try:
             from scipy.stats import t as student_t, skew as scipy_skew
             def ic95(media, std, n):
@@ -1277,7 +1250,6 @@ class PrecisionZonesPlugin:
                 s = pd.Series(arr, dtype="float64")
                 return float(s.skew()) if s.count() >= 3 else np.nan
 
-        # ----- Rótulos (PT/EN) -----
         colZona  = tr("Zona", "Zone")
         colMedia = tr("Média", "Mean")
         colVar   = tr("Variância", "Variance")
@@ -1292,7 +1264,6 @@ class PrecisionZonesPlugin:
         colICup  = tr("IC95% sup", "95% CI high")
 
         try:
-            # 1) Raster de zonas
             nome_zonas = self.dialog.zonasRasterCombo.currentText()
             zonas_layer = None
             for layer in QgsProject.instance().mapLayers().values():
@@ -1311,13 +1282,12 @@ class PrecisionZonesPlugin:
                 return
 
             gt = raster_ds.GetGeoTransform()
-            px_w, px_h = gt[1], gt[5]                 # px_h normalmente negativo
-            pixel_area = abs(px_w * px_h)             # m²
+            px_w, px_h = gt[1], gt[5]
+            pixel_area = abs(px_w * px_h)
             band = raster_ds.GetRasterBand(1)
             zona_array = band.ReadAsArray().astype(float)
-            nodata = band.GetNoDataValue()            # pode ser None
+            nodata = band.GetNoDataValue()
 
-            # 2) CSV de pontos
             if self.dados_amostrados is None:
                 QMessageBox.warning(None, tr("Erro", "Error"),
                                     tr("Nenhum CSV de pontos foi carregado.", "No points CSV loaded."))
@@ -1337,7 +1307,6 @@ class PrecisionZonesPlugin:
                 df_pontos[c] = pd.to_numeric(df_pontos[c], errors="coerce")
             df_pontos = df_pontos.dropna(subset=[col_x, col_y, col_attr])
 
-            # (A) FILTRO BBOX: remove pontos fora do raster
             x_min, y_max = gt[0], gt[3]
             x_max = x_min + px_w * raster_ds.RasterXSize
             y_min = y_max + px_h * raster_ds.RasterYSize
@@ -1363,31 +1332,29 @@ class PrecisionZonesPlugin:
                                        "All points are outside the zones raster."))
                 return
 
-            # 3) Mapear ponto -> zona (B) IGNORANDO NoData/0/NaN
             zona_valores = {}
             for _, row in df_pontos.iterrows():
                 x, y, valor = float(row[col_x]), float(row[col_y]), float(row[col_attr])
                 try:
                     col_pix = int((x - gt[0]) / gt[1])
-                    row_pix = int((y - gt[3]) / gt[5])   # gt[5] negativo
+                    row_pix = int((y - gt[3]) / gt[5])
                     z = float(zona_array[row_pix, col_pix])
                     if not np.isfinite(z):
                         continue
                     if nodata is not None and z == nodata:
                         continue
-                    if z <= 0:  # fundo/zero não conta como zona válida
+                    if z <= 0:
                         continue
                     z = int(z)
                     zona_valores.setdefault(z, []).append(valor)
                 except Exception:
-                    continue  # borda/índice fora
+                    continue
             if not zona_valores:
                 QMessageBox.warning(None, tr("Erro", "Error"),
                                     tr("Nenhum valor válido foi identificado nas zonas.",
                                        "No valid values were identified in the zones."))
                 return
 
-            # 4) Área por zona (m² -> ha) também sem NoData/0/NaN
             vals = zona_array
             valid_mask = np.isfinite(vals) & (vals > 0)
             if nodata is not None:
@@ -1395,7 +1362,6 @@ class PrecisionZonesPlugin:
             zona_ids, zona_counts = np.unique(vals[valid_mask].astype(int), return_counts=True)
             area_por_zona_m2 = dict(zip(zona_ids, zona_counts * pixel_area))
 
-            # 5) Tabela da UI
             linhas_ui = []
             for z in sorted(zona_valores.keys()):
                 s = pd.Series(zona_valores[z], dtype="float64")
@@ -1417,7 +1383,6 @@ class PrecisionZonesPlugin:
                 self.dialog.resultadoTabela.setItem(i, 3, QtWidgets.QTableWidgetItem(str(int(row[colN]))))
                 self.dialog.resultadoTabela.setItem(i, 4, QtWidgets.QTableWidgetItem(f"{row[colArea]:.2f}"))
 
-            # 6) VR% (ponderado por área)
             todos_valores = np.concatenate([np.asarray(v, dtype=float) for v in zona_valores.values()])
             var_total = float(pd.Series(todos_valores).var()) if len(todos_valores) > 1 else 0.0
             area_total_ha = df_ui[colArea].sum()
@@ -1425,7 +1390,6 @@ class PrecisionZonesPlugin:
             vr_percentual = (1 - (termo.sum() / var_total)) * 100 if var_total > 0 else 0.0
             self.dialog.resultadoVRLabel.setText(tr(f"VR: {vr_percentual:.2f}%", f"VR: {vr_percentual:.2f}%"))
 
-            # 7) CSV com métricas extras
             linhas_export = []
             for z in sorted(zona_valores.keys()):
                 arr = np.asarray(zona_valores[z], dtype=float)
@@ -1491,10 +1455,8 @@ class PrecisionZonesPlugin:
             QMessageBox.critical(None, tr("Erro", "Error"),
                                  tr(f"Falha na Redução de Variância:\n{e}",
                                     f"Variance Reduction failed:\n{e}"))
-        
 
     # --------------------------- Boxplots -----------------------------------
-
     def exportar_boxplots_analises(self):
         import numpy as np
         import matplotlib
@@ -1518,7 +1480,6 @@ class PrecisionZonesPlugin:
                                        "Select X, Y and attribute columns."))
                 return
 
-            # Raster de zonas
             nome_zonas = self.dialog.zonasRasterCombo.currentText()
             zonas_layer = None
             for layer in QgsProject.instance().mapLayers().values():
@@ -1541,15 +1502,13 @@ class PrecisionZonesPlugin:
             zona_array = band.ReadAsArray().astype(float)
             nodata = band.GetNoDataValue()
 
-            # Pontos
             df_pontos = self.dados_amostrados.copy()
             for c in [col_x, col_y, col_attr]:
                 df_pontos[c] = pd.to_numeric(df_pontos[c], errors='coerce')
             df_pontos = df_pontos.dropna(subset=[col_x, col_y, col_attr])
 
-            # Filtro BBOX para evitar índices fora
             x_min, y_max = gt[0], gt[3]
-            px_w, px_h = gt[1], gt[5]  # px_h costuma ser negativo
+            px_w, px_h = gt[1], gt[5]
             x_max = x_min + px_w * ds.RasterXSize
             y_min = y_max + px_h * ds.RasterYSize
             mask_bbox = (
@@ -1563,7 +1522,6 @@ class PrecisionZonesPlugin:
                                        "All points are outside the zones raster."))
                 return
 
-            # Mapeia ponto -> zona (ignora NoData/<=0)
             registros = []
             for _, row in df_pontos.iterrows():
                 x, y, valor = float(row[col_x]), float(row[col_y]), float(row[col_attr])
@@ -1587,7 +1545,6 @@ class PrecisionZonesPlugin:
                                        "Could not map points to zones for the boxplot."))
                 return
 
-            # DataFrame para o boxplot
             colZona  = tr("Zona", "Zone")
             colValor = tr("Valor", "Value")
             dfz = pd.DataFrame(registros, columns=[colZona, colValor]).dropna()
@@ -1598,7 +1555,6 @@ class PrecisionZonesPlugin:
             ]
             labels = [tr("Todos", "All")] + [f"Z{z}" for z in sorted(dfz[colZona].unique())]
 
-            # Escolha do arquivo
             out_path, _ = QFileDialog.getSaveFileName(
                 None,
                 tr("Salvar boxplots", "Save boxplots"),
@@ -1610,7 +1566,6 @@ class PrecisionZonesPlugin:
             if not out_path.lower().endswith(".png"):
                 out_path += ".png"
 
-            # Plot
             nplots = len(series)
             fig_w = max(6, 1.8 * nplots)
             fig, ax = plt.subplots(figsize=(fig_w, 4))
@@ -1633,3 +1588,35 @@ class PrecisionZonesPlugin:
             QMessageBox.critical(None, tr("Erro", "Error"),
                                  tr(f"Falha ao exportar boxplots:\n{e}",
                                     f"Failed to export boxplots:\n{e}"))
+
+    # --------------------- Relatório PCA (CSV) & Pasta ----------------------
+    def exportar_relatorio_pca(self):
+        if pd is None or not hasattr(self, "relatorio_pca") or not hasattr(self, "variancia_explicada"):
+            QMessageBox.warning(self.dialog, tr("Erro", "Error"),
+                                tr("Execute a PCA antes de exportar o relatório.",
+                                   "Run PCA before exporting the report."))
+            return
+        pasta = self.pasta_exportacao or QtWidgets.QFileDialog.getExistingDirectory(
+            self.dialog, tr("Escolher pasta para salvar", "Choose folder to save")
+        )
+        if not pasta:
+            return
+        try:
+            f1 = os.path.join(pasta, "pca_componentes.csv")
+            f2 = os.path.join(pasta, "pca_variancia.csv")
+            self.relatorio_pca.to_csv(f1, index=False, encoding="utf-8-sig")
+            self.variancia_explicada.to_csv(f2, index=False, encoding="utf-8-sig")
+            QMessageBox.information(self.dialog, tr("Exportado", "Exported"),
+                                    tr(f"Arquivos salvos em:\n{pasta}",
+                                       f"Files saved to:\n{pasta}"))
+        except Exception as e:
+            QMessageBox.critical(self.dialog, tr("Erro", "Error"), str(e))
+
+    def selecionar_pasta_exportacao(self):
+        pasta = QtWidgets.QFileDialog.getExistingDirectory(
+            self.dialog, tr("Escolher pasta para salvar", "Choose folder to save")
+        )
+        if pasta:
+            self.pasta_exportacao = pasta
+            if hasattr(self.dialog, "exportPath"):
+                self.dialog.exportPath.setText(pasta)
