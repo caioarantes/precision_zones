@@ -1,7 +1,7 @@
 [general]
 name=Precision Zones
 qgisMinimumVersion=3.34
-version=1.1.0
+version=1.1.1
 category=Analysis
 icon=icon.png
 author=Derlei Melo, Isabella Cunha, Lucas Amaral (FEAGRI - UNICAMP)
@@ -31,5 +31,6 @@ experimental=False
 deprecated=False
 
 [about]
-changelog=1.1.0: Added Silhouette score for cluster evaluation (Elbow + Silhouette plot and CSV export); improved labels/help for mode filter radius; minor fixes and polish.
+changelog=1.1.1: Added Silhouette score for cluster evaluation (Elbow + Silhouette plot and CSV export); improved labels/help for mode filter radius; minor fixes and polish.
 ; PT-BR: Adição do Índice de Silhueta para avaliação de clusters (gráfico Elbow + Silhueta e exportação CSV); melhoria nos rótulos/ajuda do raio do filtro modal; correções menores.
+
