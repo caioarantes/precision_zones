@@ -11,28 +11,28 @@ license=GPL-2.0-or-later
 description=Create management zones from rasters using PCA and K-Means with Elbow and Silhouette metrics, plus resampling, variance-reduction analysis, optional zone smoothing (Mode Filter), and rich CSV/PNG exports. PCA table now includes Eigenvalue (λ).
 
 about=Features:
- - Resampling & raster value extraction inside a boundary.
- - PCA with explained variance table (incl. Eigenvalue λ) and CSV export.
- - K-Means clustering with Elbow curve and Silhouette score; export indices; generate zones as a raster.
- - Optional zone smoothing (Mode Filter): SAGA Majority/Minority.
- - Variance Reduction analysis from zones and external points CSV; per-zone statistics and boxplots (PNG).
+  - Resampling & raster value extraction inside a boundary.
+  - PCA with explained variance table (incl. Eigenvalue λ) and CSV export.
+  - K-Means clustering with Elbow curve and Silhouette score; export indices; generate zones as a raster.
+  - Optional zone smoothing (Mode Filter): SAGA Majority/Minority.
+  - Variance Reduction analysis from zones and external points CSV; per-zone statistics and boxplots (PNG).
 
-Requirements:
- - Python packages: pandas, scikit-learn (optional: scipy).
- - QGIS "Processing SAGA NextGen Provider" enabled.
+  Requirements:
+  - Python packages: pandas, scikit-learn (optional: scipy).
+  - QGIS "Processing SAGA NextGen Provider" enabled.
+
+  changelog=
+    2.1.0
+    - Added Silhouette score to cluster evaluation (Elbow + Silhouette plot and CSV export).
+    - PCA table now shows Eigenvalue (λ); included in the variance CSV export.
+    - Improved labels/help for Mode Filter window/radius.
+    - Minor fixes and polish.
 
 homepage=https://github.com/Derleimelo/Precision-Zones-Plugin
 repository=https://github.com/Derleimelo/Precision-Zones-Plugin
 tracker=https://github.com/Derleimelo/Precision-Zones-Plugin/issues
 
-tags=precision agriculture,management zones,PCA,K-Means,clustering,elbow,silhouette,resampling,variance reduction,mode filter,SAGA,raster,analysis
+tags=precision agriculture;management zones;PCA;K-Means;clustering;elbow;silhouette;resampling;variance reduction;mode filter;SAGA;raster;analysis
 
 experimental=False
 deprecated=False
-
-[changelog]
-2.1.0
-- Added Silhouette score to cluster evaluation (Elbow + Silhouette plot and CSV export).
-- PCA table now shows Eigenvalue (λ); included in the variance CSV export.
-- Improved labels/help for Mode Filter window/radius.
-- Minor fixes and polish.
