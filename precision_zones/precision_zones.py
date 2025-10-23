@@ -16,6 +16,7 @@ from qgis.PyQt.QtCore import Qt, QLocale, QSettings
 import os
 import tempfile
 import uuid
+import math
 import numpy as np
 from osgeo import gdal  # para ler metadados do raster de referência
 
@@ -93,6 +94,7 @@ class PrecisionZonesPlugin:
         self.ref_gt = None
         self.ref_crs_wkt = None
         self.grid_shape = None  # (rows, cols)
+        self.res_alvo = None    # resolução em metros
 
         # nomes bonitos / rastreio
         self._ultima_fonte_tag = None   # "PCA" ou "Orig"
@@ -242,6 +244,7 @@ class PrecisionZonesPlugin:
             )
             return
 
+        # 0) Camadas / parâmetros
         vetor_nome = self.dialog.vectorLayerCombo.currentText()
         if not vetor_nome:
             QMessageBox.warning(self.dialog, tr("Erro", "Error"),
@@ -249,6 +252,16 @@ class PrecisionZonesPlugin:
                                    "Select a boundary vector layer."))
             return
         contorno_layer = self.vector_layers[vetor_nome]
+
+        # Exigir contorno em metros (UTM) para pedir resolução em m
+        if contorno_layer.crs().isGeographic():
+            QMessageBox.critical(
+                self.dialog,
+                tr("CRS inválido", "Invalid CRS"),
+                tr("O contorno está em graus (CRS geográfico). Reprojete o contorno para UTM (metros) antes de continuar.",
+                   "Boundary is in degrees (geographic CRS). Reproject the boundary to UTM (meters) before continuing.")
+            )
+            return
 
         itens = self.dialog.rasterListWidget.selectedItems()
         if not itens:
@@ -268,155 +281,279 @@ class PrecisionZonesPlugin:
                                 tr("Informe a resolução como número (ex.: 2 ou 2.5).",
                                    "Provide resolution as a number (e.g., 2 or 2.5)."))
             return
+        self.res_alvo = resolucao
+
+        # 1) Construir GRADE ÚNICA (snap) com base no contorno + resolução
+        extent_cont = contorno_layer.extent()
+        x_min = extent_cont.xMinimum()
+        x_max = extent_cont.xMaximum()
+        y_min = extent_cont.yMinimum()
+        y_max = extent_cont.yMaximum()
+
+        x0 = math.floor(x_min / resolucao) * resolucao
+        y0 = math.ceil(y_max / resolucao) * resolucao
+        cols = int(math.ceil((x_max - x0) / resolucao))
+        rows = int(math.ceil((y0 - y_min) / resolucao))
+        x1 = x0 + cols * resolucao
+        y1 = y0 - rows * resolucao
+        extent_str = f"{x0},{x1},{y1},{y0}"  # xmin,xmax,ymin,ymax
+
+        # metadados da grade
+        self.ref_gt = (x0, resolucao, 0.0, y0, 0.0, -resolucao)
+        self.ref_crs_wkt = contorno_layer.crs().toWkt()
+        self.grid_shape = (rows, cols)
 
         context = QgsProcessingContext()
         context.setTransformContext(QgsProject.instance().transformContext())
         feedback = QgsProcessingFeedback()
 
+        imagens_recortadas = []
+        primeira_saida = None
+
+        import tempfile, shutil, uuid, pathlib
+
+        base_tmp = tempfile.mkdtemp(prefix="pz_warp_")  # pasta própria e persistente
         primeira_saida = None
         imagens_recortadas = []
 
         for i, raster in enumerate(rasters):
             try:
-                output_path = os.path.join(self.plugin_dir, f"{raster.name()}_clip.tif")
                 self.iface.messageBar().pushMessage(
                     tr("Processando", "Processing"),
-                    tr(f"Reamostrando e recortando {raster.name()}...",
-                       f"Resampling and clipping {raster.name()}..."),
+                    tr(f"Reprojetando/reamostrando {raster.name()}...", f"Reprojecting/resampling {raster.name()}..."),
                     level=0
                 )
 
-                result = processing.run("gdal:cliprasterbymasklayer", {
-                    'INPUT': raster.source(),
+                # --- 0) Preparos básicos / checagens ---
+                tgt_crs = contorno_layer.crs()
+                src_crs = raster.crs()
+
+                # Extent do contorno no CRS alvo (já está)
+                cont_ext = contorno_layer.extent()
+                x_min, x_max = cont_ext.xMinimum(), cont_ext.xMaximum()
+                y_min, y_max = cont_ext.yMinimum(), cont_ext.yMaximum()
+                extent_str = f"{x_min},{x_max},{y_min},{y_max}"
+
+                # Extent do raster reprojetado para o CRS do contorno (para checar interseção)
+                try:
+                    trf = QgsCoordinateTransform(src_crs, tgt_crs, QgsProject.instance().transformContext())
+                    src_ext_tgt = trf.transformBoundingBox(raster.extent())
+                    intersects = (
+                        (src_ext_tgt.xMaximum() > x_min) and (src_ext_tgt.xMinimum() < x_max) and
+                        (src_ext_tgt.yMaximum() > y_min) and (src_ext_tgt.yMinimum() < y_max)
+                    )
+                    if not intersects:
+                        self.iface.messageBar().pushMessage(
+                            tr("Aviso", "Warning"),
+                            tr(f"{raster.name()}: raster não intersecta o contorno após reprojeção — pulando.",
+                               f"{raster.name()}: raster does not intersect boundary after reprojection — skipping."),
+                            level=1
+                        )
+                        continue
+                except Exception:
+                    # Se der algo na transformação, prossegue e deixa o Warp tentar
+                    pass
+
+                # Calcula nº de pixels com a resolução pedida (garante pelo menos 1x1)
+                width_px  = int(np.ceil((x_max - x_min) / resolucao))
+                height_px = int(np.ceil((y_max - y_min) / resolucao))
+                if width_px < 1:  width_px = 1
+                if height_px < 1: height_px = 1
+
+                # --- 1) Warp/Reproject para CRS do contorno + resolução + extent do contorno ---
+                warp_tmp = os.path.join(tempfile.gettempdir(), f"_pz_warp_{uuid.uuid4().hex[:8]}.tif")
+                out_clip = os.path.join(self.plugin_dir, f"{raster.name()}_clip.tif")
+
+                produced = False
+                try:
+                    res_warp = processing.run("gdal:warpreproject", {
+                        'INPUT': raster.source(),
+                        'SOURCE_CRS': src_crs.authid(),
+                        'TARGET_CRS': tgt_crs.authid(),
+                        'RESAMPLING': 1,                               # bilinear
+                        'NODATA': None,
+                        'TARGET_RESOLUTION': [resolucao, resolucao],
+                        'TARGET_EXTENT': extent_str,
+                        'TARGET_EXTENT_CRS': tgt_crs.authid(),
+                        'MULTITHREADING': True,
+                        'DATA_TYPE': 0,
+                        'EXTRA': f'-tap -ts {width_px} {height_px}',   # força grade e alinhamento
+                        'OUTPUT': warp_tmp
+                    }, context=context, feedback=feedback)
+
+                    cand = res_warp.get('OUTPUT', warp_tmp)
+                    produced = cand and os.path.exists(cand)
+                except Exception:
+                    produced = False
+
+                # --- 1b) Fallback com gdal.Warp se o provider não gerou saída ---
+                if not produced:
+                    try:
+                        gdal.Warp(
+                            destNameOrDestDS=warp_tmp,
+                            srcDSOrSrcDSTab=raster.source(),
+                            format="GTiff",
+                            dstSRS=tgt_crs.authid(),
+                            xRes=resolucao, yRes=resolucao,
+                            outputBounds=(x_min, y_min, x_max, y_max),
+                            resampleAlg=gdal.GRA_Bilinear,
+                            warpOptions=["MULTITHREAD=YES", "TARGET_ALIGNED_PIXELS=TRUE"],
+                            creationOptions=["COMPRESS=LZW", "TILED=YES"],
+                        )
+                        produced = os.path.exists(warp_tmp)
+                    except Exception:
+                        produced = False
+
+                if not produced:
+                    raise Exception(tr("Warp não gerou saída.", "Warp produced no output."))
+
+                # --- 2) Clip pela máscara (mantém grade do warp) ---
+                self.iface.messageBar().pushMessage(
+                    tr("Processando", "Processing"),
+                    tr(f"Recortando {raster.name()} pelo contorno...", f"Clipping {raster.name()} by boundary..."),
+                    level=0
+                )
+                res_clip = processing.run("gdal:cliprasterbymasklayer", {
+                    'INPUT': warp_tmp,
                     'MASK': contorno_layer,
-                    'SOURCE_CRS': raster.crs().authid(),
-                    'TARGET_CRS': contorno_layer.crs().authid(),
-                    'RESAMPLING': 1,
+                    'SOURCE_CRS': tgt_crs.authid(),
+                    'TARGET_CRS': tgt_crs.authid(),
+                    'RESAMPLING': 0,       # nearest no clip
                     'NODATA': None,
                     'ALPHA_BAND': False,
                     'CROP_TO_CUTLINE': True,
-                    'KEEP_RESOLUTION': False,
-                    'TARGET_RESOLUTION': [resolucao, resolucao],
-                    'OUTPUT': output_path
+                    'KEEP_RESOLUTION': True,
+                    'TARGET_RESOLUTION': None,
+                    'OUTPUT': out_clip
                 }, context=context, feedback=feedback)
 
-                layer_saida = QgsRasterLayer(result['OUTPUT'], f"{raster.name()}_clip")
-                if layer_saida.isValid():
-                    imagens_recortadas.append(layer_saida)
-                    if i == 0:
-                        primeira_saida = layer_saida
-                        self.referencia_raster = layer_saida
-                else:
+                layer_saida = QgsRasterLayer(out_clip, f"{raster.name()}_clip")
+                if not layer_saida.isValid():
                     raise Exception(tr("Camada de saída inválida.", "Invalid output layer."))
+                imagens_recortadas.append(layer_saida)
+
+                if i == 0:
+                    primeira_saida = layer_saida
+                    self.referencia_raster = layer_saida
 
             except Exception as e:
                 QMessageBox.critical(self.dialog, tr("Erro", "Error"),
                                      tr(f"Erro ao processar {raster.name()}: {str(e)}",
                                         f"Failed processing {raster.name()}: {str(e)}"))
                 return
+                
 
-        # ---- Salva metadados de referência para o dialog (exportações) ----
-        if primeira_saida:
-            try:
-                ref_path = primeira_saida.dataProvider().dataSourceUri().split("|")[0]
-                ds = gdal.Open(ref_path)
-                if ds:
-                    self.ref_gt = ds.GetGeoTransform()
-                    self.ref_crs_wkt = ds.GetProjection()
-                    self.grid_shape = (ds.RasterYSize, ds.RasterXSize)
-            except Exception:
-                pass
 
-        if primeira_saida:
-            try:
+        if primeira_saida is None:
+            QMessageBox.critical(self.dialog, tr("Erro", "Error"),
+                                 tr("Falha geral na reamostragem.", "Resampling failed."))
+            return
+
+        # 4) Gera centroides e extrai valores
+        try:
+            self.iface.messageBar().pushMessage(
+                tr("Processando", "Processing"),
+                tr("Gerando pontos centroide...", "Generating centroid points..."),
+                level=0
+            )
+
+            pontos_result = processing.run("native:pixelstopoints", {
+                'INPUT_RASTER': primeira_saida.source(),
+                'RASTER_BAND': 1,
+                'FIELD_NAME': 'valor',
+                'OUTPUT': 'TEMPORARY_OUTPUT'
+            }, context=context, feedback=feedback)
+
+            output_pontos = pontos_result['OUTPUT']
+            layer_pontos = QgsVectorLayer(output_pontos, "Pontos_centroides", "ogr") \
+                           if isinstance(output_pontos, str) else output_pontos
+
+            if not layer_pontos.isValid():
+                raise Exception(tr("Camada de pontos inválida.", "Invalid points layer."))
+
+            for raster in imagens_recortadas:
+                nome_campo = raster.name()
                 self.iface.messageBar().pushMessage(
                     tr("Processando", "Processing"),
-                    tr("Gerando pontos centroide...", "Generating centroid points..."),
+                    tr(f"Extraindo valores de {nome_campo}...",
+                       f"Extracting values from {nome_campo}..."),
                     level=0
                 )
 
-                pontos_result = processing.run("native:pixelstopoints", {
-                    'INPUT_RASTER': primeira_saida.source(),
-                    'RASTER_BAND': 1,
-                    'FIELD_NAME': 'valor',
+                result = processing.run("qgis:rastersampling", {
+                    'INPUT': layer_pontos,
+                    'RASTERCOPY': raster,
+                    'COLUMN_PREFIX': nome_campo + '_',
                     'OUTPUT': 'TEMPORARY_OUTPUT'
                 }, context=context, feedback=feedback)
 
-                output_pontos = pontos_result['OUTPUT']
-                layer_pontos = QgsVectorLayer(output_pontos, "Pontos_centroides", "ogr") \
-                               if isinstance(output_pontos, str) else output_pontos
+                output_amostras = result['OUTPUT']
+                layer_pontos = QgsVectorLayer(output_amostras, "Amostras_atribuidas", "ogr") \
+                               if isinstance(output_amostras, str) else output_amostras
 
                 if not layer_pontos.isValid():
-                    raise Exception(tr("Camada de pontos inválida.", "Invalid points layer."))
+                    raise Exception(tr(f"Falha ao carregar camada com valores de {nome_campo}.",
+                                       f"Failed to load layer with values from {nome_campo}."))
 
-                for raster in imagens_recortadas:
-                    nome_campo = raster.name()
-                    self.iface.messageBar().pushMessage(
-                        tr("Processando", "Processing"),
-                        tr(f"Extraindo valores de {nome_campo}...",
-                           f"Extracting values from {nome_campo}..."),
-                        level=0
-                    )
+            features = []
+            campos = [f.name() for f in layer_pontos.fields()]
+            for feat in layer_pontos.getFeatures():
+                attrs = feat.attributes()
+                if None not in attrs:
+                    geom = feat.geometry()
+                    if geom and not geom.isMultipart():
+                        ponto = geom.asPoint()
+                        linha = {'X': ponto.x(), 'Y': ponto.y()}
+                        linha.update({campos[i]: attr for i, attr in enumerate(attrs)})
+                        features.append(linha)
 
-                    result = processing.run("qgis:rastersampling", {
-                        'INPUT': layer_pontos,
-                        'RASTERCOPY': raster,
-                        'COLUMN_PREFIX': nome_campo + '_',
-                        'OUTPUT': 'TEMPORARY_OUTPUT'
-                    }, context=context, feedback=feedback)
-
-                    output_amostras = result['OUTPUT']
-                    layer_pontos = QgsVectorLayer(output_amostras, "Amostras_atribuidas", "ogr") \
-                                   if isinstance(output_amostras, str) else output_amostras
-
-                    if not layer_pontos.isValid():
-                        raise Exception(tr(f"Falha ao carregar camada com valores de {nome_campo}.",
-                                           f"Failed to load layer with values from {nome_campo}."))
-
-                features = []
-                campos = [f.name() for f in layer_pontos.fields()]
-                for feat in layer_pontos.getFeatures():
-                    attrs = feat.attributes()
-                    if None not in attrs:
-                        geom = feat.geometry()
-                        if geom and not geom.isMultipart():
-                            ponto = geom.asPoint()
-                            linha = {'X': ponto.x(), 'Y': ponto.y()}
-                            linha.update({campos[i]: attr for i, attr in enumerate(attrs)})
-                            features.append(linha)
-
-                df = pd.DataFrame(features)
-                df = self._limpar_dataframe(df)
-                if df is None or df.empty:
-                    QMessageBox.warning(
-                        self.dialog,
-                        tr("Sem dados válidos", "No valid data"),
-                        tr("Após a limpeza, não restaram linhas válidas para análise.",
-                           "After cleaning, no valid rows remained for analysis.")
-                    )
-                    return
-
-                self.dados_amostrados = df
-
-                dfnum = self.dados_amostrados.select_dtypes(include=[np.number]).copy()
-                for col_drop in ['X', 'Y', 'valor']:
-                    if col_drop in dfnum.columns:
-                        dfnum = dfnum.drop(columns=[col_drop])
-                self.matriz_variaveis_originais = dfnum.values
-                self.colunas_variaveis_originais = dfnum.columns.tolist()
-
-                QMessageBox.information(
+            df = pd.DataFrame(features)
+            df = self._limpar_dataframe(df)
+            if df is None or df.empty:
+                QMessageBox.warning(
                     self.dialog,
-                    tr("Etapa concluída", "Step completed"),
-                    tr("Dados reamostrados, extraídos e armazenados na memória (com limpeza) com sucesso!",
-                       "Data resampled, extracted and stored in memory (with cleaning) successfully!")
+                    tr("Sem dados válidos", "No valid data"),
+                    tr("Após a limpeza, não restaram linhas válidas para análise.",
+                       "After cleaning, no valid rows remained for analysis.")
                 )
-
-            except Exception as e:
-                QMessageBox.critical(self.dialog, tr("Erro", "Error"),
-                                     tr(f"Erro ao gerar/extrair valores: {str(e)}",
-                                        f"Failed to generate/extract values: {str(e)}"))
                 return
+
+            self.dados_amostrados = df
+
+            dfnum = self.dados_amostrados.select_dtypes(include=[np.number]).copy()
+            for col_drop in ['X', 'Y', 'valor']:
+                if col_drop in dfnum.columns:
+                    dfnum = dfnum.drop(columns=[col_drop])
+            self.matriz_variaveis_originais = dfnum.values
+            self.colunas_variaveis_originais = dfnum.columns.tolist()
+
+            # checagem opcional: confirma resolução do arquivo
+            try:
+                ref_path = primeira_saida.dataProvider().dataSourceUri().split("|")[0]
+                ds_chk = gdal.Open(ref_path)
+                gt_chk = ds_chk.GetGeoTransform()
+                rx, ry = gt_chk[1], abs(gt_chk[5])
+                if abs(rx - resolucao) > 1e-6 or abs(ry - resolucao) > 1e-6:
+                    self.iface.messageBar().pushWarning(
+                        tr("Aviso de resolução", "Resolution warning"),
+                        tr(f"O raster resultante está em {rx:.6f}×{ry:.6f} (m), diferente do valor digitado {resolucao}.",
+                           f"Result raster is {rx:.6f}×{ry:.6f} (m), different from requested {resolucao}.")
+                    )
+            except Exception:
+                pass
+
+            QMessageBox.information(
+                self.dialog,
+                tr("Etapa concluída", "Step completed"),
+                tr("Dados reamostrados, extraídos e armazenados na memória (com limpeza) com sucesso!",
+                   "Data resampled, extracted and stored in memory (with cleaning) successfully!")
+            )
+
+        except Exception as e:
+            QMessageBox.critical(self.dialog, tr("Erro", "Error"),
+                                 tr(f"Erro ao gerar/extrair valores: {str(e)}",
+                                    f"Failed to generate/extract values: {str(e)}"))
+            return
 
     # ------------------------------ PCA ------------------------------------
     def executar_pca(self):
@@ -477,12 +614,34 @@ class PrecisionZonesPlugin:
 
             variancias = pca.explained_variance_ratio_ * 100.0
             acumulada = variancias.cumsum()
+            
+            
+            autovalores = pca.explained_variance_  # λ
 
             self.dialog.pcaTable.setRowCount(len(variancias))
-            for i, (v, a) in enumerate(zip(variancias, acumulada)):
+            self.dialog.pcaTable.setColumnCount(4)
+            self.dialog.pcaTable.setHorizontalHeaderLabels([
+                tr("Componente", "Component"),
+                tr("Autovalor (λ)", "Eigenvalue (λ)"),
+                tr("Variância (%)", "Variance (%)"),
+                tr("Acumulada (%)", "Cumulative (%)")
+            ])
+            for i, (lam, v, a) in enumerate(zip(autovalores, variancias, acumulada)):
                 self.dialog.pcaTable.setItem(i, 0, QtWidgets.QTableWidgetItem(f"PC{i+1}"))
-                self.dialog.pcaTable.setItem(i, 1, QtWidgets.QTableWidgetItem(f"{v:.2f}"))
-                self.dialog.pcaTable.setItem(i, 2, QtWidgets.QTableWidgetItem(f"{a:.2f}"))
+                self.dialog.pcaTable.setItem(i, 1, QtWidgets.QTableWidgetItem(f"{lam:.6f}"))
+                self.dialog.pcaTable.setItem(i, 2, QtWidgets.QTableWidgetItem(f"{v:.2f}"))
+                self.dialog.pcaTable.setItem(i, 3, QtWidgets.QTableWidgetItem(f"{a:.2f}"))
+
+            # (opcional) ajustar o cabeçalho para ficar bonitinho
+            try:
+                from qgis.PyQt.QtWidgets import QHeaderView
+                hdr = self.dialog.pcaTable.horizontalHeader()
+                hdr.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+                hdr.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+                hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+                hdr.setStretchLastSection(True)
+            except Exception:
+                pass
 
             self.relatorio_pca = pd.DataFrame(
                 pca.components_.T,
@@ -490,8 +649,10 @@ class PrecisionZonesPlugin:
                 index=colunas_usar
             ).reset_index().rename(columns={"index": "Variável"})
 
+            # inclui autovalor no CSV de variância
             self.variancia_explicada = pd.DataFrame({
                 "Componente": [f"PC{i+1}" for i in range(len(variancias))],
+                "Autovalor (λ)": autovalores,
                 "Variância (%)": variancias,
                 "Acumulada (%)": acumulada
             })
@@ -742,7 +903,6 @@ class PrecisionZonesPlugin:
                 )
                 return
 
-            import math, os, tempfile
             import numpy as np
             from qgis.core import (
                 QgsVectorLayer, QgsField, QgsFeature, QgsGeometry, QgsPointXY,
@@ -832,29 +992,16 @@ class PrecisionZonesPlugin:
                 raise Exception(tr("Camada temporária (GeoPackage) inválida.",
                                    "Temporary (GeoPackage) layer is invalid."))
 
-            referencia = getattr(self, "referencia_raster", None)
-            if referencia is None:
-                raise Exception(tr("Raster de referência não está disponível. Execute a etapa de reamostragem.",
-                                   "Reference raster not available. Run the resampling step."))
-            if referencia.crs() != crs_contorno:
-                raise Exception(tr("CRS do raster de referência difere do contorno.",
-                                   "Reference raster CRS differs from boundary layer CRS."))
-
-            extent = referencia.extent()
-            extent_str = f"{extent.xMinimum()},{extent.xMaximum()},{extent.yMinimum()},{extent.yMaximum()}"
-
-            try:
-                res_alvo = float(self.dialog.resolucaoLineEdit.text().strip())
-                if res_alvo <= 0:
-                    raise ValueError
-            except Exception:
-                QMessageBox.warning(self.dialog, tr("Erro", "Error"),
-                                    tr("Informe uma resolução válida (m/pixel).",
-                                       "Provide a valid resolution (m/pixel)."))
-                return
-
-            width_px  = int(np.ceil((extent.xMaximum() - extent.xMinimum()) / res_alvo))
-            height_px = int(np.ceil((extent.yMaximum() - extent.yMinimum()) / res_alvo))
+            # --- usa a grade de referência calculada na reamostragem ---
+            if self.ref_gt is None or self.grid_shape is None:
+                raise Exception(tr("Grade de referência não disponível. Execute a etapa de reamostragem.",
+                                   "Reference grid not available. Run the resampling step."))
+            x0, px, _, y0, _, neg_py = self.ref_gt
+            cols = int(self.grid_shape[1])
+            rows = int(self.grid_shape[0])
+            extent_str = f"{x0},{x0 + cols * px},{y0 - rows * abs(neg_py)},{y0}"
+            width_px = cols
+            height_px = rows
 
             if not self.pasta_exportacao:
                 pasta = QtWidgets.QFileDialog.getExistingDirectory(
@@ -1404,8 +1551,28 @@ class PrecisionZonesPlugin:
                 vmin = float(s.min())
                 vmax = float(s.max())
                 cv = float((std / media * 100.0)) if (n > 1 and media != 0) else np.nan
-                sk = skewness(arr)
-                ic_inf, ic_sup = ic95(media, std, n)
+                # skewness
+                try:
+                    from scipy.stats import skew as scipy_skew
+                    sk = float(scipy_skew(arr, bias=False)) if len(arr) >= 3 else np.nan
+                except Exception:
+                    sk = float(s.skew()) if s.count() >= 3 else np.nan
+                # IC95
+                try:
+                    from scipy.stats import t as student_t
+                    if n > 1 and std is not None and not np.isnan(std):
+                        crit = float(student_t.ppf(0.975, df=n-1))
+                        erro = crit * std / math.sqrt(n)
+                        ic_inf, ic_sup = (media - erro), (media + erro)
+                    else:
+                        ic_inf, ic_sup = (np.nan, np.nan)
+                except Exception:
+                    if n > 1 and std is not None and not np.isnan(std):
+                        erro = 1.96 * std / math.sqrt(n)
+                        ic_inf, ic_sup = (media - erro), (media + erro)
+                    else:
+                        ic_inf, ic_sup = (np.nan, np.nan)
+
                 area_ha = (area_por_zona_m2.get(int(z), np.nan) / 10000.0
                            if int(z) in area_por_zona_m2 else np.nan)
                 area_pct = (area_ha / area_total_ha * 100.0) if (area_total_ha and not np.isnan(area_ha)) else np.nan

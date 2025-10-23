@@ -202,24 +202,30 @@ class PrecisionZonesDialog(QDialog):
         ))
         self.mainLayout.addWidget(self.executarButton)
 
+       
         # ===================== Aba PCA =====================
         self.pcaTab = QWidget()
         self.tabs.addTab(self.pcaTab, "PCA")
 
+        # cria o layout da aba PCA (ESSENCIAL!)
         self.pcaLayout = QVBoxLayout(self.pcaTab)
 
+        # botão para executar a PCA
         self.pcaButton = QPushButton(tr("Executar PCA", "Run PCA"))
         self.pcaLayout.addWidget(self.pcaButton)
 
+        # tabela de resultados (inicialmente com 3 colunas; depois o .py ajusta para 4)
         self.pcaTable = QTableWidget()
-        self.pcaTable.setColumnCount(3)
+        self.pcaTable.setColumnCount(4)
         self.pcaTable.setHorizontalHeaderLabels([
             tr("Componente", "Component"),
+            tr("Autovalor (λ)", "Eigenvalue (λ)"),
             tr("Variância (%)", "Variance (%)"),
             tr("Acumulada (%)", "Cumulative (%)")
         ])
         self.pcaLayout.addWidget(self.pcaTable)
 
+        # pasta para salvar relatórios
         self.exportPathButton = QPushButton(tr("Escolher pasta para salvar", "Choose folder to save"))
         self.pcaLayout.addWidget(self.exportPathButton)
 
@@ -248,10 +254,10 @@ class PrecisionZonesDialog(QDialog):
         _pcaExpLay.addWidget(self.btnExportAllPCRasters)
 
         self.pcaLayout.addWidget(self.pcaExportGroup)
-
-        # Conexões dos botões de exportação
+       # Conexões dos botões de exportação (PCA → GeoTIFF)
         self.btnExportPCRaster.clicked.connect(self._export_selected_pc_as_raster)
         self.btnExportAllPCRasters.clicked.connect(self._export_all_pcs_as_multiband)
+
 
         # ===================== Aba Zonas =====================
         self.zonasTab = QWidget()
@@ -313,9 +319,10 @@ class PrecisionZonesDialog(QDialog):
         self.zonasLayout.addWidget(self.executarZonasButton)
 
         self.indicesTable = QTableWidget()
-        self.indicesTable.setColumnCount(2)
+        self.indicesTable.setColumnCount(3)
         self.indicesTable.setHorizontalHeaderLabels([tr("Clusters", "Clusters"),
-                                                     tr("Inércia", "Inertia")])
+                                                     tr("Inércia", "Inertia"),
+                                                     tr("Silhueta", "Silhouette")])
         self.zonasLayout.addWidget(self.indicesTable)
 
         self.elbowCanvas = FigureCanvas(Figure(figsize=(4, 2)))
