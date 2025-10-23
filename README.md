@@ -23,7 +23,7 @@
 
 - **PCA (scikit-learn)**
   - **z-score** standardization (mean 0, **std 1**).
-  - Per-component and cumulative explained variance table.
+  - Per-component **Eigenvalue (λ)**, **Explained Variance (%)**, and **Cumulative (%)** table.
   - Exportable **CSV** reports (loadings and variances).
 
 - **Elbow, Silhouette & K-Means (scikit-learn)**
@@ -86,7 +86,7 @@
 
 2. **PCA**
    - Click **Run PCA**.
-   - Inspect **explained variance** and **cumulative** variance.
+   - Inspect **Eigenvalue (λ)**, **Explained variance (%)**, and **Cumulative (%)**.
    - Optionally **export** CSVs (loadings, variances).
 
 3. **Elbow + Silhouette (choose k)**
@@ -117,7 +117,7 @@
   - `zonas_manejo_k{K}_{PCA|Orig}.tif` (UInt16, aligned to reference raster)
   - `variancia_pca.csv`, `componentes_pca.csv`
   - `Elbow_Silhouette.png`, `Elbow_Silhouette.csv`
-  - `per_zone_stats.csv` (includes total VR%) and `boxplots.png`
+  - `per_zone_stats.csv` and `boxplots.png`
 
 ---
 
@@ -135,4 +135,5 @@ GPL-2.0-or-later
 
 ## Authors
 Derlei Melo; Isabella Cunha; Lucas Amaral
+
 
