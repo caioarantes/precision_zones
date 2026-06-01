@@ -2,7 +2,7 @@
 name=Precision Zones
 qgisMinimumVersion=3.34
 supportsQt6=true
-version=2.2.0
+version=2.3.0
 category=Analysis
 icon=icon.png
 author=Derlei Melo, Isabella Cunha, Lucas Amaral (FEAGRI - UNICAMP)
@@ -19,8 +19,8 @@ about=Features:
   - Variance Reduction analysis from zones and external points CSV; per-zone statistics and boxplots (PNG).
  
  Requirements:
-  - Python packages: pandas, scikit-learn (optional: scipy).
-  - QGIS "Processing SAGA NextGen Provider" enabled.
+  - Python packages pandas, scikit-learn and scipy are downloaded automatically on first run (no manual install needed).
+  - QGIS "Processing SAGA NextGen Provider" enabled (for the Mode Filter).
  
  How to cite / Como citar:
  ------------------------------
@@ -30,6 +30,11 @@ about=Features:
  ------------------------------
 
 changelog=
+  2.3.0
+  - Dependencies (pandas, scikit-learn, scipy) are now downloaded automatically on first run; no manual pip install needed.
+  - New navigation sidebar UI replacing the tabbed layout.
+  - Boundary in a geographic (degrees) CRS is auto-reprojected to its appropriate UTM zone instead of being rejected.
+  - Internal refactor into view/services/controllers/core layers (no behavior change).
   2.2.0
   - Metadata update: supportsQt6 flag enabled for Qt6-based QGIS builds.
   - Added "How to cite / Como citar" section with the AgriEngineering reference.
