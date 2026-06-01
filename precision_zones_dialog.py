@@ -196,10 +196,13 @@ class PrecisionZonesDialog(QDialog):
         depsLay.addLayout(row1)
 
         row2 = QHBoxLayout()
+        self.btnDepsDownload = QPushButton(tr("Baixar dependências", "Download dependencies"))
+        self.btnDepsDownload.clicked.connect(self._download_deps)
         self.btnDepsHelp = QPushButton(tr("Ver instruções", "Show instructions"))
         self.btnDepsHelp.clicked.connect(self._show_deps_help)
         self.btnDepsRefresh = QPushButton(tr("Reverificar", "Recheck"))
         self.btnDepsRefresh.clicked.connect(self._check_deps)
+        row2.addWidget(self.btnDepsDownload)
         row2.addWidget(self.btnDepsHelp)
         row2.addWidget(self.btnDepsRefresh)
         row2.addStretch(1)
@@ -470,15 +473,53 @@ class PrecisionZonesDialog(QDialog):
         _exec_dialog(dlg)
 
     def _check_deps(self):
+        # Garante que as libs empacotadas (extlibs) estejam no sys.path antes de testar
+        try:
+            from . import extlibs_manager
+            extlibs_manager.ensure_on_path()
+        except Exception:
+            pass
         # pandas
-        self.chkPandas.setChecked(self._try_import("pandas"))
+        has_pandas = self._try_import("pandas")
+        self.chkPandas.setChecked(has_pandas)
         # scikit-learn (KMeans está dentro de sklearn)
-        self.chkSklearn.setChecked(self._try_import("sklearn.cluster"))
+        has_sklearn = self._try_import("sklearn.cluster")
+        self.chkSklearn.setChecked(has_sklearn)
         # SAGA provider (NextGen preferencial; aceita 'sagang' ou, se não, 'saga')
         reg = QgsApplication.processingRegistry()
         has_sagang = reg.providerById("sagang") is not None
         has_saga = reg.providerById("saga") is not None
         self.chkSaga.setChecked(bool(has_sagang or has_saga))
+        # Botão de download só faz sentido se pandas/sklearn ainda faltam
+        if hasattr(self, "btnDepsDownload"):
+            self.btnDepsDownload.setVisible(not (has_pandas and has_sklearn))
+
+    def _download_deps(self):
+        from . import extlibs_manager
+        self.btnDepsDownload.setEnabled(False)
+        self.btnDepsDownload.setText(tr("Baixando…", "Downloading…"))
+        dl = extlibs_manager.start_download()
+        dl.download_done.connect(self._on_deps_downloaded)
+
+    def _on_deps_downloaded(self, success: bool, error_msg: str):
+        from . import extlibs_manager
+        self.btnDepsDownload.setEnabled(True)
+        self.btnDepsDownload.setText(tr("Baixar dependências", "Download dependencies"))
+        if success:
+            extlibs_manager.ensure_on_path()
+            self._check_deps()
+            QMessageBox.information(
+                self,
+                tr("Concluído", "Done"),
+                tr("Dependências instaladas. Reabra o plugin se algum item continuar desmarcado.",
+                   "Dependencies installed. Reopen the plugin if any item stays unchecked."),
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                tr("Falha no download", "Download failed"),
+                tr("Não foi possível baixar as dependências:\n", "Could not download dependencies:\n") + error_msg,
+            )
 
     def _try_import(self, module_name: str) -> bool:
         try:
