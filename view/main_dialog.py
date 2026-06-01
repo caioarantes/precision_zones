@@ -40,6 +40,8 @@ _PAGE_TITLES = {
     "analysis": tr("Análises", "Analysis"),
 }
 
+ORDER = [key for key, _ in PAGES]
+
 
 class PrecisionZonesDialog(QDialog):
     def __init__(self, parent=None):
@@ -67,9 +69,16 @@ class PrecisionZonesDialog(QDialog):
         self.sidebar.page_requested.connect(self._go_to_page)
         body_lay.addWidget(self.sidebar)
 
+        right_col = QWidget()
+        right_lay = QVBoxLayout(right_col)
+        right_lay.setContentsMargins(0, 0, 0, 0)
+        right_lay.setSpacing(0)
+
         self.stack = QStackedWidget()
         self.stack.setFrameShape(QFrame.Shape.NoFrame)
-        body_lay.addWidget(self.stack, 1)
+        right_lay.addWidget(self.stack, 1)
+        right_lay.addWidget(self._build_navbar())
+        body_lay.addWidget(right_col, 1)
 
         builders = {
             "resample": self._build_resample_page,
@@ -158,6 +167,46 @@ class PrecisionZonesDialog(QDialog):
         btn.setStyleSheet(STYLE_BTN_SECONDARY)
         btn.setMinimumHeight(30)
         return btn
+
+    def _build_navbar(self):
+        """Persistent Back / step / Next bar, fixed below the page stack."""
+        bar = QWidget()
+        bar.setFixedHeight(48)
+        bar.setStyleSheet("background-color: #ffffff; border-top: 1px solid #e0e0e0;")
+        lay = QHBoxLayout(bar)
+        lay.setContentsMargins(18, 8, 18, 8)
+
+        self._navBack = self._secondary(QPushButton(tr("← Voltar", "← Back")))
+        self._navBack.clicked.connect(self._nav_back)
+        lay.addWidget(self._navBack)
+
+        lay.addStretch()
+        self._navStep = QLabel("")
+        self._navStep.setStyleSheet("color: #9e9e9e; font-size: 11px;")
+        lay.addWidget(self._navStep)
+        lay.addStretch()
+
+        self._navNext = self._secondary(QPushButton(tr("Avançar →", "Next →")))
+        self._navNext.clicked.connect(self._nav_next)
+        lay.addWidget(self._navNext)
+        return bar
+
+    def _current_index(self):
+        widget = self.stack.currentWidget()
+        for k, w in self.pages.items():
+            if w is widget:
+                return ORDER.index(k)
+        return 0
+
+    def _go_to_index(self, i):
+        if 0 <= i < len(ORDER):
+            self._go_to_page(ORDER[i])
+
+    def _nav_back(self):
+        self._go_to_index(self._current_index() - 1)
+
+    def _nav_next(self):
+        self._go_to_index(self._current_index() + 1)
 
     # ------------------------------------------------------------ pages
     def _build_resample_page(self):
@@ -389,6 +438,10 @@ class PrecisionZonesDialog(QDialog):
             return
         self._page_title.setText(_PAGE_TITLES.get(key, ""))
         self.sidebar.set_active_page(key)
+        idx = ORDER.index(key)
+        self._navBack.setEnabled(idx > 0)
+        self._navNext.setEnabled(idx < len(ORDER) - 1)
+        self._navStep.setText(f"{idx + 1} / {len(ORDER)}")
         if key in ("filter", "analysis"):
             self.atualizar_lista_rasters()
 
