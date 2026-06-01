@@ -23,13 +23,8 @@ class ResampleController:
                                      "Select a boundary vector layer."))
             return
         contorno_layer = ses.vector_layers[vetor_nome]
-
-        if contorno_layer.crs().isGeographic():
-            self.notifier.critical(
-                dlg, tr("CRS inválido", "Invalid CRS"),
-                tr("O contorno está em graus (CRS geográfico). Reprojete o contorno para UTM (metros) antes de continuar.",
-                   "Boundary is in degrees (geographic CRS). Reproject the boundary to UTM (meters) before continuing."))
-            return
+        # A geographic boundary is auto-reprojected to its UTM CRS by the
+        # resampling service (no longer rejected here).
 
         itens = dlg.rasterListWidget.selectedItems()
         if not itens:
@@ -80,6 +75,7 @@ class ResampleController:
         # reference grid metadata always stored
         ses.ref_gt = result.ref_gt
         ses.ref_crs_wkt = result.ref_crs_wkt
+        ses.ref_crs_authid = result.target_crs_authid
         ses.grid_shape = result.grid_shape
         ses.referencia_raster = result.referencia_raster
 

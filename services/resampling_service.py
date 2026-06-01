@@ -22,7 +22,7 @@ from qgis import processing
 
 from ..core.deps import import_pandas
 from ..core.i18n import tr
-from ..core.raster_io import compute_grid
+from ..core.raster_io import compute_grid, estimate_utm_crs
 from .data_cleaning import limpar_dataframe
 
 
@@ -37,6 +37,7 @@ class ResampleResult:
     colunas_variaveis_originais: list
     n_removed: int
     zero_var_cols: list
+    target_crs_authid: str               # working CRS (auto-UTM if input was geographic)
 
 
 def resample_and_extract(contorno_layer, rasters, resolucao: float,
@@ -53,15 +54,36 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
         if progress:
             progress(title, msg, level)
 
+    context = QgsProcessingContext()
+    context.setTransformContext(QgsProject.instance().transformContext())
+    feedback = QgsProcessingFeedback()
+
+    # 0) auto-reproject a geographic boundary to its appropriate UTM CRS so the
+    #    resolution (meters) and metric grid are well defined.
+    if contorno_layer.crs().isGeographic():
+        utm = estimate_utm_crs(contorno_layer)
+        _say(tr("Reprojetando", "Reprojecting"),
+             tr(f"Contorno em graus — reprojetando para {utm.authid()}.",
+                f"Boundary in degrees — reprojecting to {utm.authid()}."))
+        rep = processing.run("native:reprojectlayer", {
+            "INPUT": contorno_layer,
+            "TARGET_CRS": utm,
+            "OUTPUT": "memory:boundary_utm",
+        }, context=context, feedback=feedback)
+        reproj = rep.get("OUTPUT")
+        if isinstance(reproj, str):
+            reproj = QgsVectorLayer(reproj, "boundary_utm", "ogr")
+        if reproj is None or not reproj.isValid():
+            raise Exception(tr("Falha ao reprojetar o contorno para UTM.",
+                               "Failed to reproject boundary to UTM."))
+        contorno_layer = reproj
+
     # 1) snapped reference grid
     gt, (rows, cols) = compute_grid(contorno_layer.extent(), resolucao)
     ref_gt = gt
     ref_crs_wkt = contorno_layer.crs().toWkt()
     grid_shape = (rows, cols)
-
-    context = QgsProcessingContext()
-    context.setTransformContext(QgsProject.instance().transformContext())
-    feedback = QgsProcessingFeedback()
+    target_crs_authid = contorno_layer.crs().authid()
 
     imagens_recortadas = []
     primeira_saida = None
@@ -259,4 +281,5 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
         referencia_raster=referencia_raster,
         matriz_variaveis_originais=matriz, colunas_variaveis_originais=colunas,
         n_removed=n_removed, zero_var_cols=zero_var_cols,
+        target_crs_authid=target_crs_authid,
     )

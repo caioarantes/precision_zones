@@ -9,7 +9,10 @@ import math
 import numpy as np
 from osgeo import gdal, osr
 
-from qgis.core import QgsProject, QgsRasterLayer
+from qgis.core import (
+    QgsProject, QgsRasterLayer, QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform, QgsPointXY,
+)
 
 from .i18n import tr
 
@@ -27,6 +30,27 @@ def find_layer_by_name(nome):
         if layer.name() == nome:
             return layer
     return None
+
+
+def estimate_utm_crs(layer):
+    """Return the appropriate WGS84 / UTM CRS for a layer, from its extent
+    centroid (mirrors geopandas estimate_utm_crs). EPSG 326xx N / 327xx S."""
+    src = layer.crs()
+    ext = layer.extent()
+    cx = (ext.xMinimum() + ext.xMaximum()) / 2.0
+    cy = (ext.yMinimum() + ext.yMaximum()) / 2.0
+
+    wgs = QgsCoordinateReferenceSystem.fromEpsgId(4326)
+    if src != wgs:
+        trf = QgsCoordinateTransform(src, wgs, QgsProject.instance().transformContext())
+        pt = trf.transform(QgsPointXY(cx, cy))
+        lon, lat = pt.x(), pt.y()
+    else:
+        lon, lat = cx, cy
+
+    zone = int((lon + 180.0) / 6.0) % 60 + 1
+    epsg = (32600 if lat >= 0 else 32700) + zone
+    return QgsCoordinateReferenceSystem.fromEpsgId(epsg)
 
 
 def compute_grid(extent, resolucao: float):

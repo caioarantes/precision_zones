@@ -73,7 +73,7 @@ The dialog uses a **navigation sidebar** (hover to expand) with one page per ste
 
 **Resampling · PCA · Zones · Mode Filter · Analysis**
 
-1. **Resampling** — pick the boundary vector (UTM/metric CRS), select rasters, set resolution (m/pixel) → centroids + extracted values, cleaned in memory.
+1. **Resampling** — pick the boundary vector (any CRS; a geographic/degrees boundary is **auto-reprojected to its appropriate UTM zone**), select rasters, set resolution (m/pixel) → centroids + extracted values, cleaned in memory.
 2. **PCA** — Run PCA; inspect explained/cumulative variance; export CSVs or PC rasters.
 3. **Zones** — choose PCA (n PCs) or original variables; set k-range → Elbow + Silhouette; export PNG/CSV; set final k → **Generate Zones** (GeoTIFF added to project).
 4. **Mode Filter** — pick a zones raster, set window radius → SAGA majority filter, aligned to the grid.
@@ -112,7 +112,7 @@ precision_zones/
 
 - **Missing dependency:** dependencies download automatically on first launch; if offline, install `pandas` / `scikit-learn` / `scipy` in the QGIS Python env manually.
 - **SAGA not available:** install/enable the **SAGA NextGen** provider in *Plugins ▶ Manage and Install…* / *Processing → Providers*.
-- **Invalid CRS:** the boundary must be in a **projected (metric/UTM)** CRS, not geographic degrees.
+- **CRS:** a geographic (degrees) boundary is auto-reprojected to its UTM zone; a projected boundary is used as-is. Resolution is always in meters.
 - **Export errors:** choose an **export folder** first (button on the PCA page).
 
 ---

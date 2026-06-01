@@ -230,7 +230,9 @@ class ZonesController:
                                          "Select a valid boundary layer."))
                 return
             contorno_layer = ses.vector_layers[contorno_nome]
-            crs_authid = contorno_layer.crs().authid()
+            # Points (X,Y) live on the resampling grid, which may be an
+            # auto-estimated UTM CRS — use that, not the raw boundary CRS.
+            crs_authid = ses.ref_crs_authid or contorno_layer.crs().authid()
 
             if ses.ref_gt is None or ses.grid_shape is None:
                 self.notifier.warning(dlg, tr("Erro", "Error"),

@@ -31,6 +31,7 @@ class PZSession:
     # Reference grid metadata
     ref_gt: Optional[tuple] = None                  # geotransform (6 floats)
     ref_crs_wkt: Optional[str] = None
+    ref_crs_authid: Optional[str] = None            # working CRS authid (auto-UTM if reprojected)
     grid_shape: Optional[tuple] = None              # (rows, cols)
     res_alvo: Optional[float] = None                # resolution (m)
     referencia_raster: Any = None                   # QgsRasterLayer
