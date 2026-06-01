@@ -15,6 +15,7 @@ from qgis.core import QgsProject, QgsVectorLayer, QgsRasterLayer
 from .core.session import PZSession
 from .core.notify import Notifier
 from .core.qt_compat import wa_delete_on_close
+from .core.i18n import install_translator
 from .view.main_dialog import PrecisionZonesDialog
 from .controllers.resample_ctrl import ResampleController
 from .controllers.pca_ctrl import PCAController
@@ -27,6 +28,7 @@ class PrecisionZonesPlugin:
     def __init__(self, iface):
         self.iface = iface
         self.plugin_dir = os.path.dirname(__file__)
+        install_translator(self.plugin_dir)
         self.dialog = None
         self.session = PZSession()
         self.notifier = Notifier(iface)

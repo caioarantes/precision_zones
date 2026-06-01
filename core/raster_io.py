@@ -104,8 +104,7 @@ def write_geotiff(array2d, geotransform, crs_wkt, out_path,
     ds = driver.Create(out_path, cols, rows, 1, gdal.GDT_Float32,
                        options=["COMPRESS=LZW", "TILED=YES"])
     if ds is None:
-        raise RuntimeError(tr("Não foi possível criar o GeoTIFF de saída.",
-                              "Could not create output GeoTIFF."))
+        raise RuntimeError(tr("Could not create output GeoTIFF."))
     ds.SetGeoTransform(geotransform)
 
     if crs_wkt:

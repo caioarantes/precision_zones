@@ -63,12 +63,11 @@ def apply_majority_filter(src_path: str, raster_crs_authid: str,
 
     saga_id = saga_majority_id()
     if saga_id is None:
-        raise Exception(tr("SAGA não disponível. Ative o provedor SAGA em Processamento.",
-                           "SAGA not available. Enable the SAGA provider in Processing."))
+        raise Exception(tr("SAGA not available. Enable the SAGA provider in Processing."))
 
     dsA = gdal.Open(src_path)
     if dsA is None:
-        raise Exception(tr("Falha ao abrir o raster de entrada.", "Failed to open input raster."))
+        raise Exception(tr("Failed to open input raster."))
 
     gt = dsA.GetGeoTransform()
     width_px = int(dsA.RasterXSize)
@@ -108,7 +107,7 @@ def apply_majority_filter(src_path: str, raster_crs_authid: str,
             created = p
             break
     if created is None:
-        raise Exception(tr("SAGA não gerou arquivo de saída.", "SAGA did not produce an output file."))
+        raise Exception(tr("SAGA did not produce an output file."))
 
     def _valid(path):
         try:
@@ -132,7 +131,7 @@ def apply_majority_filter(src_path: str, raster_crs_authid: str,
         saga_path = created
 
     if not _valid(saga_path):
-        raise Exception(tr("Saída do SAGA ilegível pelo GDAL.", "SAGA output unreadable by GDAL."))
+        raise Exception(tr("SAGA output unreadable by GDAL."))
 
     ok = False
     try:
@@ -184,8 +183,7 @@ def apply_majority_filter(src_path: str, raster_crs_authid: str,
     if (dsAligned is None or
             dsAligned.RasterXSize != width_px or
             dsAligned.RasterYSize != height_px):
-        raise Exception(tr("Warp não criou o arquivo alinhado esperado (a.tif).",
-                           "Warp did not create expected aligned file (a.tif)."))
+        raise Exception(tr("Warp did not create expected aligned file (a.tif)."))
 
     dsA = gdal.Open(src_path)
     dsB = gdal.Open(p_aln)

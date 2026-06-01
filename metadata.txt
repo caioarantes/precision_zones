@@ -2,7 +2,7 @@
 name=Precision Zones
 qgisMinimumVersion=3.34
 supportsQt6=true
-version=2.3.0
+version=2.4.0
 category=Analysis
 icon=icon.png
 author=Derlei Melo, Isabella Cunha, Lucas Amaral (FEAGRI - UNICAMP)
@@ -30,6 +30,10 @@ about=Features:
  ------------------------------
 
 changelog=
+  2.4.0
+  - Proper internationalization (Qt .ts/.qm); English is now the source language and the UI follows the QGIS locale.
+  - Translations: English, Portuguese (pt_BR), Spanish, French, Italian (full); Hindi and Chinese (partial, falling back to English).
+  - Added i18n/ files and a pure-Python compile_translations.py (no lrelease needed).
   2.3.0
   - Dependencies (pandas, scikit-learn, scipy) are now downloaded automatically on first run; no manual pip install needed.
   - New navigation sidebar UI replacing the tabbed layout.

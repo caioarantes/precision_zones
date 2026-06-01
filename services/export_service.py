@@ -37,7 +37,7 @@ def build_boxplots(df_points, col_x: str, col_y: str, col_attr: str,
 
     ds = gdal.Open(zones_raster_path)
     if ds is None:
-        raise ValueError(tr("Falha ao abrir o raster de zonas.", "Failed to open zones raster."))
+        raise ValueError(tr("Failed to open zones raster."))
 
     gt = ds.GetGeoTransform()
     band = ds.GetRasterBand(1)
@@ -59,8 +59,7 @@ def build_boxplots(df_points, col_x: str, col_y: str, col_attr: str,
     )
     df_pontos = df_pontos.loc[mask_bbox].copy()
     if df_pontos.empty:
-        raise ValueError(tr("Todos os pontos ficaram fora do raster de zonas.",
-                            "All points are outside the zones raster."))
+        raise ValueError(tr("All points are outside the zones raster."))
 
     registros = []
     for _, row in df_pontos.iterrows():
@@ -80,28 +79,26 @@ def build_boxplots(df_points, col_x: str, col_y: str, col_attr: str,
             continue
 
     if not registros:
-        raise NoPointsInZones(tr("Não foi possível mapear pontos às zonas para o boxplot.",
-                                 "Could not map points to zones for the boxplot."))
+        raise NoPointsInZones(tr("Could not map points to zones for the boxplot."))
 
-    colZona = tr("Zona", "Zone")
-    colValor = tr("Valor", "Value")
+    colZona = tr("Zone")
+    colValor = tr("Value")
     dfz = pd.DataFrame(registros, columns=[colZona, colValor]).dropna()
 
     series = [dfz[colValor].values] + [
         dfz.loc[dfz[colZona] == z, colValor].values
         for z in sorted(dfz[colZona].unique())
     ]
-    labels = [tr("Todos", "All")] + [f"Z{z}" for z in sorted(dfz[colZona].unique())]
+    labels = [tr("All")] + [f"Z{z}" for z in sorted(dfz[colZona].unique())]
 
     nplots = len(series)
     fig_w = max(6, 1.8 * nplots)
     fig, ax = plt.subplots(figsize=(fig_w, 4))
     ax.boxplot(series, showfliers=True)
     ax.set_xticklabels(labels)
-    ax.set_xlabel(tr("Grupos", "Groups"))
+    ax.set_xlabel(tr("Groups"))
     ax.set_ylabel(col_attr)
-    ax.set_title(tr(f"Boxplots – {col_attr} (Todos vs. Zonas)",
-                    f"Boxplots – {col_attr} (All vs. Zones)"))
+    ax.set_title(tr("Boxplots – {} (All vs. Zones)").format(col_attr))
     ax.grid(True, axis='y', linestyle='--', alpha=0.4)
     plt.tight_layout()
     fig.savefig(out_path, dpi=200, bbox_inches='tight')
@@ -138,7 +135,7 @@ def export_all_pcs_multiband(scores, df, ref_gt, ref_crs_wkt, grid_shape, out_pa
     ds = driver.Create(out_path, cols, rows, nb, gdal.GDT_Float32,
                        options=["COMPRESS=LZW", "TILED=YES"])
     if ds is None:
-        raise RuntimeError(tr("Falha ao criar GeoTIFF multibanda.", "Failed to create multiband GeoTIFF."))
+        raise RuntimeError(tr("Failed to create multiband GeoTIFF."))
 
     ds.SetGeoTransform(ref_gt)
     if ref_crs_wkt:

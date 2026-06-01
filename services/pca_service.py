@@ -31,19 +31,16 @@ def run_pca(df) -> PCAResult:
         raise DependencyMissing("scikit-learn")
 
     if df is None or df.empty:
-        raise ValueError(tr("Nenhum dado carregado. Execute a etapa de reamostragem.",
-                            "No data loaded. Run the resampling step first."))
+        raise ValueError(tr("No data loaded. Run the resampling step first."))
 
     df = df.copy()
     colunas_usar = [c for c in df.columns if c not in ['X', 'Y', 'valor']]
     if not colunas_usar:
-        raise ValueError(tr("Sem variáveis numéricas para PCA.",
-                            "No numeric variables for PCA."))
+        raise ValueError(tr("No numeric variables for PCA."))
 
     dados = df[colunas_usar]
     if dados.shape[0] < 2:
-        raise ValueError(tr("Dados insuficientes para PCA (menos de 2 linhas).",
-                            "Insufficient data for PCA (less than 2 rows)."))
+        raise ValueError(tr("Insufficient data for PCA (less than 2 rows)."))
 
     dados_padronizados = StandardScaler().fit_transform(dados)
     pca = PCA()

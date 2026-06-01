@@ -2,7 +2,7 @@
 
 **Precision Zones** streamlines end-to-end **Management Zone** delineation in QGIS: raster preprocessing, value extraction, PCA, Elbow/K-Means analysis, zone raster generation, majority (mode) filtering with SAGA, and per-zone statistics including **Variance Reduction (VR%)** and **boxplots**.
 
-> UI language: **EN by default**. Switches to **PT-BR** automatically if your QGIS/system locale is Portuguese (or set `PZ_FORCE_LANG=pt`, or `QSettings PrecisionZones/lang=pt*`).
+> UI language: **English by default**, following the QGIS UI locale (`Settings ▶ Options ▶ General`). Bundled translations: English (source), Portuguese (pt_BR), Spanish, French, Italian — plus partial Hindi and Chinese (untranslated strings fall back to English). Translations use Qt `.ts`/`.qm` under `i18n/`; rebuild with `python compile_translations.py`.
 
 ---
 

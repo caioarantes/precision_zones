@@ -106,7 +106,7 @@ class Sidebar(QFrame):
         self._group = QButtonGroup(self)
         self._group.setExclusive(True)
         for key, label in PAGES:
-            btn = self._make_button(tr(label, label), key)
+            btn = self._make_button(tr(label), key)
             btn.clicked.connect(lambda _checked=False, k=key: self.page_requested.emit(k))
             lay.addWidget(btn)
             self._group.addButton(btn)

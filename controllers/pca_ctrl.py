@@ -24,14 +24,14 @@ class PCAController:
         try:
             result = pca_service.run_pca(ses.dados_amostrados)
         except DependencyMissing as e:
-            self.notifier.warning(dlg, tr("Dependência ausente", "Missing dependency"),
+            self.notifier.warning(dlg, tr("Missing dependency"),
                                   e.user_message())
             return
         except ValueError as e:
-            self.notifier.warning(dlg, tr("Erro", "Error"), str(e))
+            self.notifier.warning(dlg, tr("Error"), str(e))
             return
         except Exception as e:
-            self.notifier.critical(dlg, tr("Erro na PCA", "PCA error"), str(e))
+            self.notifier.critical(dlg, tr("PCA error"), str(e))
             return
 
         ses.pca_transformada = result.scores
@@ -42,10 +42,10 @@ class PCAController:
         dlg.pcaTable.setRowCount(len(result.variance_pct))
         dlg.pcaTable.setColumnCount(4)
         dlg.pcaTable.setHorizontalHeaderLabels([
-            tr("Componente", "Component"),
-            tr("Autovalor (λ)", "Eigenvalue (λ)"),
-            tr("Variância (%)", "Variance (%)"),
-            tr("Acumulada (%)", "Cumulative (%)")
+            tr("Component"),
+            tr("Eigenvalue (λ)"),
+            tr("Variance (%)"),
+            tr("Cumulative (%)")
         ])
         for i, (lam, v, a) in enumerate(zip(result.eigenvalues, result.variance_pct,
                                             result.cumulative_pct)):
@@ -66,14 +66,13 @@ class PCAController:
 
         dlg.popular_combo_pcs(len(result.variance_pct))
 
-        self.notifier.info(dlg, tr("PCA concluída", "PCA finished"),
-                           tr("A análise PCA foi executada com sucesso.",
-                              "PCA analysis finished successfully."))
+        self.notifier.info(dlg, tr("PCA finished"),
+                           tr("PCA analysis finished successfully."))
 
     # ---------------------------------------------------------------- export
     def choose_export_folder(self):
         pasta = QFileDialog.getExistingDirectory(
-            self.dialog, tr("Escolher pasta para salvar", "Choose folder to save"))
+            self.dialog, tr("Choose folder to save"))
         if pasta:
             self.session.pasta_exportacao = pasta
             if hasattr(self.dialog, "exportPath"):
@@ -83,20 +82,19 @@ class PCAController:
         dlg = self.dialog
         ses = self.session
         if ses.relatorio_pca is None or ses.variancia_explicada is None:
-            self.notifier.warning(dlg, tr("Erro", "Error"),
-                                  tr("Execute a PCA antes de exportar o relatório.",
-                                     "Run PCA before exporting the report."))
+            self.notifier.warning(dlg, tr("Error"),
+                                  tr("Run PCA before exporting the report."))
             return
         pasta = ses.pasta_exportacao or QFileDialog.getExistingDirectory(
-            dlg, tr("Escolher pasta para salvar", "Choose folder to save"))
+            dlg, tr("Choose folder to save"))
         if not pasta:
             return
         try:
             export_service.save_pca_report(ses.relatorio_pca, ses.variancia_explicada, pasta)
-            self.notifier.info(dlg, tr("Exportado", "Exported"),
-                               tr(f"Arquivos salvos em:\n{pasta}", f"Files saved to:\n{pasta}"))
+            self.notifier.info(dlg, tr("Exported"),
+                               tr("Files saved to:\n{}").format(pasta))
         except Exception as e:
-            self.notifier.critical(dlg, tr("Erro", "Error"), str(e))
+            self.notifier.critical(dlg, tr("Error"), str(e))
 
     # -------------------------------------------------- PC raster exports
     def _ensure_ref_metadata(self) -> bool:
@@ -129,18 +127,15 @@ class PCAController:
         ses = self.session
         try:
             if not self._ensure_ref_metadata():
-                self.notifier.warning(dlg, tr("Erro", "Error"),
-                                      tr("Metadados do raster de referência ausentes. "
-                                         "Selecione um raster na aba Reamostragem (ou execute a etapa).",
-                                         "Reference raster metadata missing. "
+                self.notifier.warning(dlg, tr("Error"),
+                                      tr("Reference raster metadata missing. "
                                          "Select a raster in the Resampling tab (or run that step)."))
                 return
 
             scores, ncomp = ses.resolve_pca_scores()
             if scores is None or ncomp == 0:
-                self.notifier.warning(dlg, tr("Erro", "Error"),
-                                      tr("Execute a PCA no plugin antes de exportar.",
-                                         "Run PCA in the plugin before exporting."))
+                self.notifier.warning(dlg, tr("Error"),
+                                      tr("Run PCA in the plugin before exporting."))
                 return
             # autofill combo if needed
             if dlg.pcExportCombo.count() == 0:
@@ -155,25 +150,24 @@ class PCAController:
                     except Exception:
                         pc_idx = None
             if pc_idx is None or pc_idx < 0:
-                self.notifier.warning(dlg, tr("Atenção", "Warning"),
-                                      tr("Nenhuma PC selecionada.", "No PC selected."))
+                self.notifier.warning(dlg, tr("Warning"),
+                                      tr("No PC selected."))
                 return
             if pc_idx >= ncomp:
-                self.notifier.warning(dlg, tr("Atenção", "Warning"),
-                                      tr("Índice de PC inválido.", "Invalid PC index."))
+                self.notifier.warning(dlg, tr("Warning"),
+                                      tr("Invalid PC index."))
                 return
 
             df = ses.dados_amostrados
             if df is None or df.empty or not all(k in df.columns for k in ("X", "Y")):
-                self.notifier.warning(dlg, tr("Erro", "Error"),
-                                      tr("Pontos (X,Y) não encontrados. Execute a reamostragem no plugin.",
-                                         "Points (X,Y) not found. Run resampling in the plugin."))
+                self.notifier.warning(dlg, tr("Error"),
+                                      tr("Points (X,Y) not found. Run resampling in the plugin."))
                 return
 
             sugestao = f"PC{pc_idx+1}.tif"
             out_path, _ = QFileDialog.getSaveFileName(
-                dlg, tr("Salvar GeoTIFF da PC", "Save PC GeoTIFF"), sugestao,
-                tr("GeoTIFF (*.tif)", "GeoTIFF (*.tif)"))
+                dlg, tr("Save PC GeoTIFF"), sugestao,
+                tr("GeoTIFF (*.tif)"))
             if not out_path:
                 return
             if not out_path.lower().endswith(".tif"):
@@ -181,41 +175,36 @@ class PCAController:
 
             export_service.export_pc_raster(scores, pc_idx, df, ses.ref_gt,
                                             ses.ref_crs_wkt, ses.grid_shape, out_path)
-            self.notifier.info(dlg, tr("Concluído", "Done"),
-                               tr("Raster da PC exportado com sucesso.",
-                                  "PC raster exported successfully."))
+            self.notifier.info(dlg, tr("Done"),
+                               tr("PC raster exported successfully."))
         except Exception as e:
-            self.notifier.critical(dlg, tr("Erro ao exportar", "Export error"), str(e))
+            self.notifier.critical(dlg, tr("Export error"), str(e))
 
     def export_all_pcs(self):
         dlg = self.dialog
         ses = self.session
         try:
             if not self._ensure_ref_metadata():
-                self.notifier.warning(dlg, tr("Erro", "Error"),
-                                      tr("Metadados do raster de referência ausentes. "
-                                         "Selecione um raster na aba Reamostragem (ou execute a etapa).",
-                                         "Reference raster metadata missing. "
+                self.notifier.warning(dlg, tr("Error"),
+                                      tr("Reference raster metadata missing. "
                                          "Select a raster in the Resampling tab (or run that step)."))
                 return
 
             scores, ncomp = ses.resolve_pca_scores()
             if scores is None or ncomp == 0:
-                self.notifier.warning(dlg, tr("Erro", "Error"),
-                                      tr("Execute a PCA no plugin antes de exportar.",
-                                         "Run PCA in the plugin before exporting."))
+                self.notifier.warning(dlg, tr("Error"),
+                                      tr("Run PCA in the plugin before exporting."))
                 return
 
             df = ses.dados_amostrados
             if df is None or df.empty or not all(k in df.columns for k in ("X", "Y")):
-                self.notifier.warning(dlg, tr("Erro", "Error"),
-                                      tr("Pontos (X,Y) não encontrados. Execute a reamostragem no plugin.",
-                                         "Points (X,Y) not found. Run resampling in the plugin."))
+                self.notifier.warning(dlg, tr("Error"),
+                                      tr("Points (X,Y) not found. Run resampling in the plugin."))
                 return
 
             out_path, _ = QFileDialog.getSaveFileName(
-                dlg, tr("Salvar PCs (multibanda)", "Save PCs (multiband)"), "PCs.tif",
-                tr("GeoTIFF (*.tif)", "GeoTIFF (*.tif)"))
+                dlg, tr("Save PCs (multiband)"), "PCs.tif",
+                tr("GeoTIFF (*.tif)"))
             if not out_path:
                 return
             if not out_path.lower().endswith(".tif"):
@@ -223,8 +212,7 @@ class PCAController:
 
             export_service.export_all_pcs_multiband(scores, df, ses.ref_gt,
                                                     ses.ref_crs_wkt, ses.grid_shape, out_path)
-            self.notifier.info(dlg, tr("Concluído", "Done"),
-                               tr("GeoTIFF multibanda das PCs exportado com sucesso.",
-                                  "Multiband PCs GeoTIFF exported successfully."))
+            self.notifier.info(dlg, tr("Done"),
+                               tr("Multiband PCs GeoTIFF exported successfully."))
         except Exception as e:
-            self.notifier.critical(dlg, tr("Erro ao exportar", "Export error"), str(e))
+            self.notifier.critical(dlg, tr("Export error"), str(e))

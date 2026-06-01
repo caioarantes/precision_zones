@@ -20,7 +20,7 @@ class FilterController:
             nome_raster = dlg.rasterFiltroCombo.currentText().strip()
             raster = obter_raster_por_nome(nome_raster)
             if not raster or not raster.isValid():
-                raise Exception(tr("Raster não encontrado.", "Raster not found."))
+                raise Exception(tr("Raster not found."))
             src_path = raster.dataProvider().dataSourceUri().split("|")[0]
 
             raio = int(dlg.windowSizeSpin.value())
@@ -30,11 +30,10 @@ class FilterController:
             result = filter_service.apply_majority_filter(
                 src_path, raster.crs().authid(), raio, threshold)
 
-            layer_name = tr(f"{raster.name()} – maioria (r={result.raio})",
-                            f"{raster.name()} – majority (r={result.raio})")
+            layer_name = tr("{} – majority (r={})").format(raster.name(), result.raio)
             out_layer = QgsRasterLayer(result.out_path, layer_name, "gdal")
             if not out_layer.isValid():
-                raise Exception(tr("Saída inválida/ilegível.", "Invalid/unreadable output."))
+                raise Exception(tr("Invalid/unreadable output."))
 
             try:
                 out_layer.setRenderer(raster.renderer().clone())
@@ -48,10 +47,9 @@ class FilterController:
             dlg.atualizar_lista_rasters()
 
             self.notifier.info(
-                dlg, tr("Filtro de maioria (SAGA)", "Majority filter (SAGA)"),
-                tr(f"Filtro aplicado.\nCamada criada: {layer_name}",
-                   f"Filter applied.\nLayer created: {layer_name}"))
+                dlg, tr("Majority filter (SAGA)"),
+                tr("Filter applied.\nLayer created: {}").format(layer_name))
         except Exception as e:
             self.notifier.critical(
-                dlg, tr("Erro ao aplicar filtro de maioria", "Error applying majority filter"),
+                dlg, tr("Error applying majority filter"),
                 str(e))

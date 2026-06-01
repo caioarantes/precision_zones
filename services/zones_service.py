@@ -66,17 +66,14 @@ def rasterize_zones(df_xyz, crs_authid: str, ref_gt: tuple, grid_shape: tuple,
             err = QgsVectorFileWriter.NoError
 
     if err != QgsVectorFileWriter.NoError:
-        raise Exception(tr(f"Falha ao salvar GeoPackage temporário: {err_msg}",
-                           f"Failed to save temporary GeoPackage: {err_msg}"))
+        raise Exception(tr("Failed to save temporary GeoPackage: {}").format(err_msg))
 
     pontos_src = QgsVectorLayer(tmp_gpkg + "|layername=zonas_pts", "zonas_pts", "ogr")
     if not pontos_src.isValid():
-        raise Exception(tr("Camada temporária (GeoPackage) inválida.",
-                           "Temporary (GeoPackage) layer is invalid."))
+        raise Exception(tr("Temporary (GeoPackage) layer is invalid."))
 
     if ref_gt is None or grid_shape is None:
-        raise Exception(tr("Grade de referência não disponível. Execute a etapa de reamostragem.",
-                           "Reference grid not available. Run the resampling step."))
+        raise Exception(tr("Reference grid not available. Run the resampling step."))
 
     x0, px, _, y0, _, neg_py = ref_gt
     cols = int(grid_shape[1])

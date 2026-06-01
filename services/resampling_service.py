@@ -62,9 +62,8 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
     #    resolution (meters) and metric grid are well defined.
     if contorno_layer.crs().isGeographic():
         utm = estimate_utm_crs(contorno_layer)
-        _say(tr("Reprojetando", "Reprojecting"),
-             tr(f"Contorno em graus — reprojetando para {utm.authid()}.",
-                f"Boundary in degrees — reprojecting to {utm.authid()}."))
+        _say(tr("Reprojecting"),
+             tr("Boundary in degrees — reprojecting to {}.").format(utm.authid()))
         rep = processing.run("native:reprojectlayer", {
             "INPUT": contorno_layer,
             "TARGET_CRS": utm,
@@ -74,8 +73,7 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
         if isinstance(reproj, str):
             reproj = QgsVectorLayer(reproj, "boundary_utm", "ogr")
         if reproj is None or not reproj.isValid():
-            raise Exception(tr("Falha ao reprojetar o contorno para UTM.",
-                               "Failed to reproject boundary to UTM."))
+            raise Exception(tr("Failed to reproject boundary to UTM."))
         contorno_layer = reproj
 
     # 1) snapped reference grid
@@ -97,9 +95,8 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
     extent_str = f"{x_min},{x_max},{y_min},{y_max}"
 
     for raster in rasters:
-        _say(tr("Processando", "Processing"),
-             tr(f"Reprojetando/reamostrando {raster.name()}...",
-                f"Reprojecting/resampling {raster.name()}..."))
+        _say(tr("Processing"),
+             tr("Reprojecting/resampling {}...").format(raster.name()))
 
         src_crs = raster.crs()
 
@@ -112,9 +109,8 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
                 (src_ext_tgt.yMaximum() > y_min) and (src_ext_tgt.yMinimum() < y_max)
             )
             if not intersects:
-                _say(tr("Aviso", "Warning"),
-                     tr(f"{raster.name()}: raster não intersecta o contorno após reprojeção — pulando.",
-                        f"{raster.name()}: raster does not intersect boundary after reprojection — skipping."),
+                _say(tr("Warning"),
+                     tr("{}: raster does not intersect boundary after reprojection — skipping.").format(raster.name()),
                      level=1)
                 continue
         except Exception:
@@ -171,11 +167,10 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
                 produced = False
 
         if not produced:
-            raise Exception(tr("Warp não gerou saída.", "Warp produced no output."))
+            raise Exception(tr("Warp produced no output."))
 
-        _say(tr("Processando", "Processing"),
-             tr(f"Recortando {raster.name()} pelo contorno...",
-                f"Clipping {raster.name()} by boundary..."))
+        _say(tr("Processing"),
+             tr("Clipping {} by boundary...").format(raster.name()))
 
         processing.run("gdal:cliprasterbymasklayer", {
             'INPUT': warp_tmp,
@@ -193,7 +188,7 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
 
         layer_saida = QgsRasterLayer(out_clip, f"{raster.name()}_clip")
         if not layer_saida.isValid():
-            raise Exception(tr("Camada de saída inválida.", "Invalid output layer."))
+            raise Exception(tr("Invalid output layer."))
         imagens_recortadas.append(layer_saida)
 
         if primeira_saida is None:
@@ -201,11 +196,11 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
             referencia_raster = layer_saida
 
     if primeira_saida is None:
-        raise Exception(tr("Falha geral na reamostragem.", "Resampling failed."))
+        raise Exception(tr("Resampling failed."))
 
     # 2) centroid points + sampling
-    _say(tr("Processando", "Processing"),
-         tr("Gerando pontos centroide...", "Generating centroid points..."))
+    _say(tr("Processing"),
+         tr("Generating centroid points..."))
 
     pontos_result = processing.run("native:pixelstopoints", {
         'INPUT_RASTER': primeira_saida.source(),
@@ -218,13 +213,12 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
     layer_pontos = QgsVectorLayer(output_pontos, "Pontos_centroides", "ogr") \
         if isinstance(output_pontos, str) else output_pontos
     if not layer_pontos.isValid():
-        raise Exception(tr("Camada de pontos inválida.", "Invalid points layer."))
+        raise Exception(tr("Invalid points layer."))
 
     for raster in imagens_recortadas:
         nome_campo = raster.name()
-        _say(tr("Processando", "Processing"),
-             tr(f"Extraindo valores de {nome_campo}...",
-                f"Extracting values from {nome_campo}..."))
+        _say(tr("Processing"),
+             tr("Extracting values from {}...").format(nome_campo))
 
         result = processing.run("qgis:rastersampling", {
             'INPUT': layer_pontos,
@@ -237,8 +231,7 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
         layer_pontos = QgsVectorLayer(output_amostras, "Amostras_atribuidas", "ogr") \
             if isinstance(output_amostras, str) else output_amostras
         if not layer_pontos.isValid():
-            raise Exception(tr(f"Falha ao carregar camada com valores de {nome_campo}.",
-                               f"Failed to load layer with values from {nome_campo}."))
+            raise Exception(tr("Failed to load layer with values from {}.").format(nome_campo))
 
     features = []
     campos = [f.name() for f in layer_pontos.fields()]

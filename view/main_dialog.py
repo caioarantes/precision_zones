@@ -33,11 +33,11 @@ from .styles import (
 HELP_URL = "https://github.com/Derleimelo/Precision-Zones-Plugin"
 
 _PAGE_TITLES = {
-    "resample": tr("Reamostragem", "Resampling"),
+    "resample": tr("Resampling"),
     "pca": "PCA",
-    "zones": tr("Zonas", "Zones"),
-    "filter": tr("Filtro Modal", "Mode Filter"),
-    "analysis": tr("Análises", "Analysis"),
+    "zones": tr("Zones"),
+    "filter": tr("Mode Filter"),
+    "analysis": tr("Analysis"),
 }
 
 ORDER = [key for key, _ in PAGES]
@@ -125,7 +125,7 @@ class PrecisionZonesDialog(QDialog):
 
         self.helpButton = QPushButton("?")
         self.helpButton.setFixedSize(28, 28)
-        self.helpButton.setToolTip(tr("Saiba mais", "Learn more"))
+        self.helpButton.setToolTip(tr("Learn more"))
         self.helpButton.setStyleSheet(STYLE_BTN_HELP)
         self.helpButton.setCursor(Qt.CursorShape.PointingHandCursor)
         self.helpButton.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(HELP_URL)))
@@ -176,7 +176,7 @@ class PrecisionZonesDialog(QDialog):
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(18, 8, 18, 8)
 
-        self._navBack = self._secondary(QPushButton(tr("← Voltar", "← Back")))
+        self._navBack = self._secondary(QPushButton(tr("← Back")))
         self._navBack.clicked.connect(self._nav_back)
         lay.addWidget(self._navBack)
 
@@ -186,7 +186,7 @@ class PrecisionZonesDialog(QDialog):
         lay.addWidget(self._navStep)
         lay.addStretch()
 
-        self._navNext = self._secondary(QPushButton(tr("Avançar →", "Next →")))
+        self._navNext = self._secondary(QPushButton(tr("Next →")))
         self._navNext.clicked.connect(self._nav_next)
         lay.addWidget(self._navNext)
         return bar
@@ -211,75 +211,70 @@ class PrecisionZonesDialog(QDialog):
     # ------------------------------------------------------------ pages
     def _build_resample_page(self):
         page, card = self._new_page()
-        card.addWidget(QLabel(tr("Camada Vetorial - UTM (contorno):",
-                                 "Vector layer - UTM (boundary):")))
+        card.addWidget(QLabel(tr("Vector layer - UTM (boundary):")))
         self.vectorLayerCombo = QComboBox()
         card.addWidget(self.vectorLayerCombo)
 
-        card.addWidget(QLabel(tr("Rasters disponíveis:", "Available rasters:")))
+        card.addWidget(QLabel(tr("Available rasters:")))
         self.rasterListWidget = QListWidget()
         set_multiselection(self.rasterListWidget)
         self.rasterListWidget.setMinimumHeight(140)
         card.addWidget(self.rasterListWidget)
 
-        card.addWidget(QLabel(tr(
-            "Resolução (em metros - use a referência do raster de maior resolução):",
-            "Resolution (meters – use the highest-resolution raster as reference):")))
+        card.addWidget(QLabel(tr("Resolution (meters – use the highest-resolution raster as reference):")))
         self.resolucaoLineEdit = QLineEdit()
         card.addWidget(self.resolucaoLineEdit)
 
-        self.executarButton = self._primary(QPushButton(tr(
-            "Executar reamostragem e extrair valores", "Run resampling and extract values")))
+        self.executarButton = self._primary(QPushButton(tr("Run resampling and extract values")))
         card.addWidget(self.executarButton)
         return page
 
     def _build_pca_page(self):
         page, card = self._new_page()
-        self.pcaButton = self._primary(QPushButton(tr("Executar PCA", "Run PCA")))
+        self.pcaButton = self._primary(QPushButton(tr("Run PCA")))
         card.addWidget(self.pcaButton)
 
         self.pcaTable = QTableWidget()
         self.pcaTable.setColumnCount(4)
         self.pcaTable.setHorizontalHeaderLabels([
-            tr("Componente", "Component"), tr("Autovalor (λ)", "Eigenvalue (λ)"),
-            tr("Variância (%)", "Variance (%)"), tr("Acumulada (%)", "Cumulative (%)")])
+            tr("Component"), tr("Eigenvalue (λ)"),
+            tr("Variance (%)"), tr("Cumulative (%)")])
         self.pcaTable.setMinimumHeight(160)
         card.addWidget(self.pcaTable)
 
         self.exportPathButton = self._secondary(QPushButton(
-            tr("Escolher pasta para salvar", "Choose folder to save")))
+            tr("Choose folder to save")))
         card.addWidget(self.exportPathButton)
 
-        self.exportPath = QLabel(tr("Nenhuma pasta selecionada", "No folder selected"))
+        self.exportPath = QLabel(tr("No folder selected"))
         self.exportPath.setStyleSheet("color: #9e9e9e; font-size: 11px;")
         card.addWidget(self.exportPath)
 
         self.exportButton = self._secondary(QPushButton(
-            tr("Exportar relatório completo (CSV)", "Export full report (CSV)")))
+            tr("Export full report (CSV)")))
         card.addWidget(self.exportButton)
 
-        self.pcaExportGroup = QGroupBox(tr("Exportar PCs como raster", "Export PCs as raster"))
+        self.pcaExportGroup = QGroupBox(tr("Export PCs as raster"))
         gl = QHBoxLayout(self.pcaExportGroup)
-        self.pcExportLabel = QLabel(tr("Escolha a PC:", "Choose PC:"))
+        self.pcExportLabel = QLabel(tr("Choose PC:"))
         gl.addWidget(self.pcExportLabel)
         self.pcExportCombo = QComboBox()
         self.pcExportCombo.setEnabled(False)
         gl.addWidget(self.pcExportCombo)
         self.btnExportPCRaster = self._secondary(QPushButton(
-            tr("Exportar PC selecionada (GeoTIFF)", "Export selected PC (GeoTIFF)")))
+            tr("Export selected PC (GeoTIFF)")))
         gl.addWidget(self.btnExportPCRaster)
         self.btnExportAllPCRasters = self._secondary(QPushButton(
-            tr("Exportar todas as PCs (multi-banda)", "Export all PCs (multi-band)")))
+            tr("Export all PCs (multi-band)")))
         gl.addWidget(self.btnExportAllPCRasters)
         card.addWidget(self.pcaExportGroup)
         return page
 
     def _build_zones_page(self):
         page, card = self._new_page()
-        self.grpFonte = QGroupBox(tr("Fonte dos dados para clusterização",
-                                     "Data source for clustering"))
-        self.radPCA = QRadioButton(tr("PCA (componentes selecionadas)", "PCA (selected components)"))
-        self.radOrig = QRadioButton(tr("Variáveis originais (z-score)", "Original variables (z-score)"))
+        self.grpFonte = QGroupBox(tr("Data source for clustering"))
+        self.radPCA = QRadioButton(tr("PCA (selected components)"))
+        self.radOrig = QRadioButton(tr("Original variables (z-score)"))
         self.radPCA.setChecked(True)
         gLay = QVBoxLayout(self.grpFonte)
         gLay.addWidget(self.radPCA)
@@ -287,7 +282,7 @@ class PrecisionZonesDialog(QDialog):
         card.addWidget(self.grpFonte)
 
         pcRow = QHBoxLayout()
-        self.pcSelectorLabel = QLabel(tr("Número de PCs a usar:", "Number of PCs to use:"))
+        self.pcSelectorLabel = QLabel(tr("Number of PCs to use:"))
         pcRow.addWidget(self.pcSelectorLabel)
         self.pcSelector = QComboBox()
         pcRow.addWidget(self.pcSelector)
@@ -298,14 +293,14 @@ class PrecisionZonesDialog(QDialog):
         self._toggle_pc_selector(self.radPCA.isChecked())
 
         rangeRow = QHBoxLayout()
-        self.clusterMinLabel = QLabel(tr("Clusters mínimos:", "Min clusters:"))
+        self.clusterMinLabel = QLabel(tr("Min clusters:"))
         rangeRow.addWidget(self.clusterMinLabel)
         self.clusterMinSpin = QSpinBox()
         self.clusterMinSpin.setMinimum(2)
         self.clusterMinSpin.setMaximum(20)
         self.clusterMinSpin.setValue(2)
         rangeRow.addWidget(self.clusterMinSpin)
-        self.clusterMaxLabel = QLabel(tr("Clusters máximos:", "Max clusters:"))
+        self.clusterMaxLabel = QLabel(tr("Max clusters:"))
         rangeRow.addWidget(self.clusterMaxLabel)
         self.clusterMaxSpin = QSpinBox()
         self.clusterMaxSpin.setMinimum(2)
@@ -315,15 +310,13 @@ class PrecisionZonesDialog(QDialog):
         rangeRow.addStretch()
         card.addLayout(rangeRow)
 
-        self.executarZonasButton = self._primary(QPushButton(tr(
-            "Executar análise de zonas (KMeans + Elbow + Silhueta)",
-            "Run zones analysis (KMeans + Elbow + Silhouette)")))
+        self.executarZonasButton = self._primary(QPushButton(tr("Run zones analysis (KMeans + Elbow + Silhouette)")))
         card.addWidget(self.executarZonasButton)
 
         self.indicesTable = QTableWidget()
         self.indicesTable.setColumnCount(3)
         self.indicesTable.setHorizontalHeaderLabels([
-            tr("Clusters", "Clusters"), tr("Inércia", "Inertia"), tr("Silhueta", "Silhouette")])
+            tr("Clusters"), tr("Inertia"), tr("Silhouette")])
         self.indicesTable.setMinimumHeight(120)
         card.addWidget(self.indicesTable)
 
@@ -333,15 +326,14 @@ class PrecisionZonesDialog(QDialog):
         self.elbowAxes = self.elbowCanvas.figure.add_subplot(111)
 
         self.exportElbowButton = self._secondary(QPushButton(
-            tr("Exportar gráfico (Elbow + Silhueta) [PNG]", "Export plot (Elbow + Silhouette) [PNG]")))
+            tr("Export plot (Elbow + Silhouette) [PNG]")))
         card.addWidget(self.exportElbowButton)
         self.exportZonasButton = self._secondary(QPushButton(
-            tr("Exportar resultados (Elbow + Silhueta) [CSV]", "Export results (Elbow + Silhouette) [CSV]")))
+            tr("Export results (Elbow + Silhouette) [CSV]")))
         card.addWidget(self.exportZonasButton)
 
         finalRow = QHBoxLayout()
-        self.finalClusterLabel = QLabel(tr("Número de zonas para gerar (KMeans):",
-                                           "Number of zones to generate (KMeans):"))
+        self.finalClusterLabel = QLabel(tr("Number of zones to generate (KMeans):"))
         finalRow.addWidget(self.finalClusterLabel)
         self.finalClusterSpin = QSpinBox()
         self.finalClusterSpin.setMinimum(2)
@@ -352,17 +344,17 @@ class PrecisionZonesDialog(QDialog):
         card.addLayout(finalRow)
 
         self.gerarZonasButton = self._primary(QPushButton(
-            tr("Gerar zonas de manejo (como raster)", "Generate management zones (as raster)")))
+            tr("Generate management zones (as raster)")))
         card.addWidget(self.gerarZonasButton)
         return page
 
     def _build_filter_page(self):
         page, card = self._new_page()
-        card.addWidget(QLabel(tr("Raster de entrada (Zonas):", "Input raster (Zones):")))
+        card.addWidget(QLabel(tr("Input raster (Zones):")))
         self.rasterFiltroCombo = QComboBox()
         card.addWidget(self.rasterFiltroCombo)
 
-        card.addWidget(QLabel(tr("Tamanho da janela (ex: 3, 5, 7):", "Window size (e.g., 3, 5, 7):")))
+        card.addWidget(QLabel(tr("Window size (e.g., 3, 5, 7):")))
         self.windowSizeSpin = QSpinBox()
         self.windowSizeSpin.setMinimum(3)
         self.windowSizeSpin.setMaximum(99)
@@ -370,20 +362,19 @@ class PrecisionZonesDialog(QDialog):
         self.windowSizeSpin.setValue(5)
         card.addWidget(self.windowSizeSpin)
 
-        hint = QLabel(tr("Tamanho de janela: 3 = 7x7 pixels, 5 = 11x11 pixels, etc.",
-                         "Window size: 3 = 7x7 pixels, 5 = 11x11 pixels, etc."))
+        hint = QLabel(tr("Window size: 3 = 7x7 pixels, 5 = 11x11 pixels, etc."))
         hint.setStyleSheet("color: #9e9e9e; font-size: 11px;")
         hint.setWordWrap(True)
         card.addWidget(hint)
 
         self.executarFiltroButton = self._primary(QPushButton(
-            tr("Executar Filtro Modal", "Run Mode Filter")))
+            tr("Run Mode Filter")))
         card.addWidget(self.executarFiltroButton)
         return page
 
     def _build_analysis_page(self):
         page, card = self._new_page()
-        card.addWidget(QLabel(tr("Raster de Zonas (já no QGIS):", "Zones raster (already in QGIS):")))
+        card.addWidget(QLabel(tr("Zones raster (already in QGIS):")))
         self.zonasRasterCombo = QComboBox()
         card.addWidget(self.zonasRasterCombo)
 
@@ -394,31 +385,31 @@ class PrecisionZonesDialog(QDialog):
         self.resultadoTabela = QTableWidget()
         self.resultadoTabela.setColumnCount(5)
         self.resultadoTabela.setHorizontalHeaderLabels([
-            tr("Zona", "Zone"), tr("Média", "Mean"), tr("Variância", "Variance"),
-            "n", tr("Área (ha)", "Area (ha)")])
+            tr("Zone"), tr("Mean"), tr("Variance"),
+            "n", tr("Area (ha)")])
         self.resultadoTabela.setMinimumHeight(140)
         card.addWidget(self.resultadoTabela)
 
-        card.addWidget(QLabel(tr("Ou carregar CSV com dados externos:", "Or load CSV with external data:")))
+        card.addWidget(QLabel(tr("Or load CSV with external data:")))
         self.botaoCarregarCSV = self._secondary(QPushButton(
-            tr("Carregar CSV de pontos", "Load points CSV")))
+            tr("Load points CSV")))
         card.addWidget(self.botaoCarregarCSV)
 
-        card.addWidget(QLabel(tr("Coluna X (longitude):", "X column (longitude):")))
+        card.addWidget(QLabel(tr("X column (longitude):")))
         self.colunaXCombo = QComboBox()
         card.addWidget(self.colunaXCombo)
-        card.addWidget(QLabel(tr("Coluna Y (latitude):", "Y column (latitude):")))
+        card.addWidget(QLabel(tr("Y column (latitude):")))
         self.colunaYCombo = QComboBox()
         card.addWidget(self.colunaYCombo)
-        card.addWidget(QLabel(tr("Coluna do atributo:", "Attribute column:")))
+        card.addWidget(QLabel(tr("Attribute column:")))
         self.colunaAtributoCombo = QComboBox()
         card.addWidget(self.colunaAtributoCombo)
 
         self.executarAnaliseButton = self._primary(QPushButton(
-            tr("Executar Redução de Variância", "Run Variance Reduction")))
+            tr("Run Variance Reduction")))
         card.addWidget(self.executarAnaliseButton)
         self.exportarBoxplotsButton = self._secondary(QPushButton(
-            tr("Exportar boxplots (PNG)", "Export boxplots (PNG)")))
+            tr("Export boxplots (PNG)")))
         card.addWidget(self.exportarBoxplotsButton)
         return page
 

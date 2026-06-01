@@ -17,12 +17,7 @@ class DependencyMissing(Exception):
         super().__init__(package)
 
     def user_message(self) -> str:
-        return tr(
-            f"Este recurso requer o pacote Python '{self.package}'.\n"
-            "Abra a aba Reamostragem e clique em 'Baixar dependências' para instalar.",
-            f"This feature requires the Python package '{self.package}'.\n"
-            "Open the Resampling tab and click 'Download dependencies' to install.",
-        )
+        return tr("This feature requires the Python package '{}'.\nOpen the Resampling tab and click 'Download dependencies' to install.").format(self.package)
 
 
 def import_pandas():

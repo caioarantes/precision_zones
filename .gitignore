@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
+*.bak
 extlibs/
 dist/
 .venv

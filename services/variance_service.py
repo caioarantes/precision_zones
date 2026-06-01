@@ -59,22 +59,22 @@ def variance_reduction(df_points, col_x: str, col_y: str, col_attr: str,
     pd = import_pandas()
     ic95, skewness = _stats_funcs(pd)
 
-    colZona = tr("Zona", "Zone")
-    colMedia = tr("Média", "Mean")
-    colVar = tr("Variância", "Variance")
+    colZona = tr("Zone")
+    colMedia = tr("Mean")
+    colVar = tr("Variance")
     colN = "n"
-    colArea = tr("Área (ha)", "Area (ha)")
-    colAreaPct = tr("Área (%)", "Area (%)")
-    colMediana = tr("Mediana", "Median")
-    colCV = tr("CV (%)", "CV (%)")
-    colMin = tr("Mín", "Min")
-    colMax = tr("Máx", "Max")
-    colIClo = tr("IC95% inf", "95% CI low")
-    colICup = tr("IC95% sup", "95% CI high")
+    colArea = tr("Area (ha)")
+    colAreaPct = tr("Area (%)")
+    colMediana = tr("Median")
+    colCV = tr("CV (%)")
+    colMin = tr("Min")
+    colMax = tr("Max")
+    colIClo = tr("95% CI low")
+    colICup = tr("95% CI high")
 
     raster_ds = gdal.Open(zones_raster_path)
     if raster_ds is None:
-        raise ValueError(tr("Falha ao abrir o raster de zonas.", "Failed to open zones raster."))
+        raise ValueError(tr("Failed to open zones raster."))
 
     gt = raster_ds.GetGeoTransform()
     px_w, px_h = gt[1], gt[5]
@@ -98,8 +98,7 @@ def variance_reduction(df_points, col_x: str, col_y: str, col_attr: str,
     dropped = int((~mask_bbox).sum())
     df_pontos = df_pontos.loc[mask_bbox].copy()
     if df_pontos.empty:
-        raise ValueError(tr("Todos os pontos ficaram fora do raster de zonas.",
-                            "All points are outside the zones raster."))
+        raise ValueError(tr("All points are outside the zones raster."))
 
     zona_valores = {}
     for _, row in df_pontos.iterrows():
@@ -119,8 +118,7 @@ def variance_reduction(df_points, col_x: str, col_y: str, col_attr: str,
             continue
 
     if not zona_valores:
-        raise NoZonesData(tr("Nenhum valor válido foi identificado nas zonas.",
-                             "No valid values were identified in the zones."))
+        raise NoZonesData(tr("No valid values were identified in the zones."))
 
     vals = zona_array
     valid_mask = np.isfinite(vals) & (vals > 0)
