@@ -27,6 +27,7 @@ SIDEBAR_MUTED = "rgba(255, 255, 255, 170)"
 
 # (key, label) in stack/display order
 PAGES = [
+    ("intro", "Intro"),
     ("resample", "Resampling"),
     ("pca", "PCA"),
     ("zones", "Zones"),
@@ -279,7 +280,15 @@ class Sidebar(QFrame):
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
 
-        if kind == "resample":
+        if kind == "intro":
+            # info circle with an "i"
+            painter.drawEllipse(QRectF(3, 3, 14, 14))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(color))
+            painter.drawEllipse(QPointF(10, 7), 1.0, 1.0)
+            painter.setPen(pen)
+            painter.drawLine(10, 9, 10, 14)
+        elif kind == "resample":
             # grid 2x2
             painter.drawRect(QRectF(3, 3, 6, 6))
             painter.drawRect(QRectF(11, 3, 6, 6))

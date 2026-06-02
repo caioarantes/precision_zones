@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: 'Segoe UI', Arial, sans-serif; color:#212121;">
+
+  <h1 style="color:#37474F; margin-bottom:2px;">Precision Zones</h1>
+  <p style="color:#607d8b; font-size:13px; margin-top:0;">
+    Management-zone delineation for precision agriculture, inside QGIS.
+  </p>
+
+  <p style="font-size:13px; line-height:1.5;">
+    <b>Precision Zones</b> turns one or more rasters over a field boundary into
+    <b>management zones</b>: it resamples and clips the inputs to a common grid,
+    extracts pixel-centroid values, reduces dimensionality with <b>PCA</b>,
+    finds a sensible number of zones with <b>K-Means</b> (Elbow + Silhouette),
+    writes the zones as a raster, optionally smooths them with a
+    <b>majority (mode) filter</b>, and reports <b>per-zone statistics</b> and
+    <b>Variance Reduction (VR%)</b>.
+  </p>
+
+  <h2 style="color:#37474F; font-size:15px; margin-bottom:4px;">Features</h2>
+  <ul style="font-size:13px; line-height:1.55;">
+    <li><b>Resampling &amp; extraction</b> — reproject/clip rasters to the
+        boundary grid (a geographic boundary is auto-reprojected to its UTM zone)
+        and sample values to centroid points.</li>
+    <li><b>PCA</b> — standardized components with explained/cumulative variance;
+        export CSV reports or PC rasters (single- or multi-band GeoTIFF).</li>
+    <li><b>Zones</b> — Elbow + Silhouette across a k-range, then generate the
+        management-zone raster from the chosen k.</li>
+    <li><b>Mode Filter</b> — SAGA majority filter aligned to the grid, preserving
+        zone ids.</li>
+    <li><b>Analysis</b> — per-zone mean, variance, CV%, 95% CI, IQR, skewness,
+        area; area-weighted total <b>VR%</b>; boxplots (PNG).</li>
+  </ul>
+
+  <p style="font-size:12px; color:#607d8b;">
+    Use the sidebar (or the Back / Next buttons) to move through the workflow:
+    <b>Resampling &rarr; PCA &rarr; Zones &rarr; Mode Filter &rarr; Analysis</b>.
+    Python dependencies install automatically on first run.
+  </p>
+
+  <h2 style="color:#37474F; font-size:15px; margin-bottom:4px;">How to cite</h2>
+  <p style="font-size:12px; line-height:1.5; background:#f5f5f5; border:1px solid #e0e0e0; padding:8px;">
+    Any published work using this plugin <b>must cite</b>:<br>
+    Melo, D. D., Cunha, I. A., &amp; Amaral, L. R. (2025).
+    <i>Precision Zones: An Open-Source QGIS Plugin for Management-Zone
+    Segmentation in Precision Agriculture.</i> AgriEngineering, 7(12), 420.<br>
+    <a href="https://www.mdpi.com/2624-7402/7/12/420">https://www.mdpi.com/2624-7402/7/12/420</a>
+    &nbsp;&middot;&nbsp; DOI:
+    <a href="https://doi.org/10.3390/agriengineering7120420">10.3390/agriengineering7120420</a>
+  </p>
+
+  <p style="font-size:11px; color:#9e9e9e;">
+    Authors: Derlei Melo, Isabella Cunha, Lucas Amaral &nbsp;&middot;&nbsp;
+    License: GPL-2.0-or-later &nbsp;&middot;&nbsp;
+    <a href="https://github.com/Derleimelo/Precision-Zones-Plugin">Documentation</a>
+  </p>
+
+</body>
+</html>

@@ -6,12 +6,14 @@ navigation sidebar, and a QStackedWidget of pages. Holds only widget constructio
 and simple update helpers; all backend work lives in services/, orchestrated by
 controllers/ which connect to this dialog's widgets by name.
 """
+import os
+
 from qgis.PyQt.QtCore import Qt, QUrl
 from qgis.PyQt.QtGui import QDesktopServices
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
     QListWidget, QLineEdit, QTableWidget, QWidget, QSpinBox, QGroupBox,
-    QRadioButton, QStackedWidget, QScrollArea, QFrame,
+    QRadioButton, QStackedWidget, QScrollArea, QFrame, QTextBrowser,
 )
 
 from qgis.core import QgsProject, QgsRasterLayer
@@ -33,6 +35,7 @@ from .styles import (
 HELP_URL = "https://github.com/Derleimelo/Precision-Zones-Plugin"
 
 _PAGE_TITLES = {
+    "intro": tr("Introduction"),
     "resample": tr("Resampling"),
     "pca": "PCA",
     "zones": tr("Zones"),
@@ -81,6 +84,7 @@ class PrecisionZonesDialog(QDialog):
         body_lay.addWidget(right_col, 1)
 
         builders = {
+            "intro": self._build_intro_page,
             "resample": self._build_resample_page,
             "pca": self._build_pca_page,
             "zones": self._build_zones_page,
@@ -95,7 +99,7 @@ class PrecisionZonesDialog(QDialog):
             self.stack.addWidget(scroll)
 
         self.stack.currentChanged.connect(self._sync_page_state)
-        self.stack.setCurrentWidget(self.pages["resample"])
+        self.stack.setCurrentWidget(self.pages["intro"])
         self._sync_page_state(self.stack.currentIndex())
 
         root.addWidget(body, 1)
@@ -117,7 +121,7 @@ class PrecisionZonesDialog(QDialog):
         sep.setStyleSheet("color: #d0d0d0; font-size: 16px;")
         lay.addWidget(sep)
 
-        self._page_title = QLabel(_PAGE_TITLES["resample"])
+        self._page_title = QLabel(_PAGE_TITLES["intro"])
         self._page_title.setStyleSheet("color: #616161; font-size: 13px; margin-left: 6px;")
         lay.addWidget(self._page_title)
 
@@ -209,6 +213,26 @@ class PrecisionZonesDialog(QDialog):
         self._go_to_index(self._current_index() + 1)
 
     # ------------------------------------------------------------ pages
+    def _build_intro_page(self):
+        page = QWidget()
+        page.setObjectName("pzPage")
+        page.setStyleSheet(STYLE_PAGE)
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(18, 18, 18, 18)
+        browser = QTextBrowser()
+        browser.setObjectName("pzPanel")
+        browser.setOpenExternalLinks(True)
+        plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        intro_path = os.path.join(plugin_dir, "intro.html")
+        try:
+            with open(intro_path, "r", encoding="utf-8") as f:
+                browser.setHtml(f.read())
+        except Exception:
+            browser.setHtml("<h1>Precision Zones</h1>")
+        outer.addWidget(browser)
+        self.introBrowser = browser
+        return page
+
     def _build_resample_page(self):
         page, card = self._new_page()
         card.addWidget(QLabel(tr("Vector layer - UTM (boundary):")))

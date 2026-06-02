@@ -32,6 +32,7 @@ INCLUDE_FILES = [
     "requirements.txt",
     "icon.png",
     "resources_rc.py",
+    "intro.html",
     "README.md",
     "LICENSE",
 ]
