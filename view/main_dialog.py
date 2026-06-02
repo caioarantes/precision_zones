@@ -51,7 +51,19 @@ class PrecisionZonesDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Precision Zones")
-        self.setMinimumSize(760, 520)
+        # Behave like a normal top-level window (min/max/close + system menu),
+        # non-modal and resizable — matching AGLgis.
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowSystemMenuHint
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
+        )
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        # Opening size doubles as the floor — the user can only grow the window.
+        self.setMinimumSize(840, 600)
         self.resize(840, 600)
         self.setSizeGripEnabled(True)
         self.setStyleSheet(STYLE_DIALOG)
