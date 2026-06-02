@@ -13,15 +13,15 @@
 - GDAL / Processing — included with QGIS.
 - Python deps `pandas`, `scikit-learn`, `scipy` — **downloaded automatically** on first launch (see below). `numpy` and `matplotlib` ship with QGIS.
 
-### Dependencies (auto-managed)
+### Dependencies (auto-managed, multi-version)
 
-Third-party Python packages not bundled with QGIS are vendored in **`extlibs.zip`** and downloaded from GitHub into a local `extlibs/` folder on first run, then added to `sys.path` — no manual `pip` needed.
+Third-party packages not bundled with QGIS (`pandas`, `scikit-learn`, `scipy`) are provisioned into a local `extlibs/` folder on first run and added to `sys.path` — no manual `pip` needed. The provisioning matches the **running QGIS Python**, so different QGIS versions work automatically. On first run, `extlibs_manager` tries, in order:
 
-- `extlibs.zip` contains: `pandas`, `scikit-learn`, `scipy` (+ their deps), built for **cp312 / win_amd64** to match QGIS LTR's Python.
-- On other platforms / Python versions, install manually instead (OSGeo4W Shell):
-  ```
-  pip install pandas scikit-learn scipy
-  ```
+1. **Prebuilt zip** tagged for this interpreter: `extlibs-<cpXY>-<platform>.zip` (e.g. `extlibs-cp312-win_amd64.zip`) — fast.
+2. **Runtime pip** — runs the QGIS Python's `pip` to install `requirements.txt` into `extlibs/` (works on any Python/OS with internet); `numpy`/`matplotlib` are dropped afterward since QGIS provides them.
+3. **Manual** — if both fail, install `pandas scikit-learn scipy` in the QGIS Python yourself.
+
+The active build is recorded in `extlibs/.ready` with its tag; a QGIS Python upgrade re-provisions automatically. Prebuilt zips are currently provided for Windows (per Python version); other platforms use the pip fallback until their zip is published.
 
 ---
 
@@ -114,7 +114,7 @@ Helper scripts (run with QGIS' Python, e.g. `python-qgis-ltr`):
 
 - **`build_plugin.py`** — compiles translations and packages the runtime code into `dist/precision_zones.zip` (deps excluded; fetched at runtime).
 - **`compile_translations.py`** — compiles `i18n/*.ts` → `*.qm` (pure Python, no `lrelease`). Run after editing any `.ts`.
-- **`build_extlibs_zip.py`** — rebuilds `extlibs.zip` from a `pip --target` dir (pandas/scikit-learn/scipy, cp312/win_amd64), then commit + push it so the runtime download stays in sync.
+- **`build_extlibs_zip.py`** — run with **no args** under a target QGIS Python to build `extlibs-<tag>.zip` (e.g. `extlibs-cp312-win_amd64.zip`) for that interpreter; pip-installs deps, strips numpy/matplotlib, zips. To support another QGIS version, run it under that QGIS's Python and commit + push the resulting `extlibs-<tag>.zip`. (Two-arg mode zips an existing `pip --target` dir.)
 
 Adding a language: copy an existing `i18n/precision_zones_<lang>.ts`, translate the `<translation>` entries (keep `{}` placeholders), run `compile_translations.py`, and map the locale in `core/i18n.install_translator` if its two-letter code differs (e.g. `pt`→`pt_BR`).
 
