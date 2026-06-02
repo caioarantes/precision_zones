@@ -57,8 +57,8 @@ Third-party Python packages not bundled with QGIS are vendored in **`extlibs.zip
 
 ## Installation
 
-- **From ZIP (manual)**
-  1. Zip the `precision_zones/` folder.
+- **From ZIP**
+  1. Build the package: `python-qgis-ltr build_plugin.py` → `dist/precision_zones.zip` (or zip the `precision_zones/` folder manually).
   2. QGIS → **Plugins → Install from ZIP** → select the `.zip`.
   3. On first launch the plugin downloads `extlibs.zip` (pandas/scikit-learn/scipy).
 
@@ -69,7 +69,7 @@ Third-party Python packages not bundled with QGIS are vendored in **`extlibs.zip
 
 ## UI overview
 
-The dialog uses a **navigation sidebar** (hover to expand) with one page per step:
+The dialog uses a **navigation sidebar** (hover to expand) with one page per step, plus a fixed **Back / Next** bar at the bottom to step through the workflow:
 
 **Resampling · PCA · Zones · Mode Filter · Analysis**
 
@@ -108,12 +108,32 @@ precision_zones/
 
 ---
 
+## Development
+
+Helper scripts (run with QGIS' Python, e.g. `python-qgis-ltr`):
+
+- **`build_plugin.py`** — compiles translations and packages the runtime code into `dist/precision_zones.zip` (deps excluded; fetched at runtime).
+- **`compile_translations.py`** — compiles `i18n/*.ts` → `*.qm` (pure Python, no `lrelease`). Run after editing any `.ts`.
+- **`build_extlibs_zip.py`** — rebuilds `extlibs.zip` from a `pip --target` dir (pandas/scikit-learn/scipy, cp312/win_amd64), then commit + push it so the runtime download stays in sync.
+
+Adding a language: copy an existing `i18n/precision_zones_<lang>.ts`, translate the `<translation>` entries (keep `{}` placeholders), run `compile_translations.py`, and map the locale in `core/i18n.install_translator` if its two-letter code differs (e.g. `pt`→`pt_BR`).
+
+---
+
 ## Troubleshooting
 
 - **Missing dependency:** dependencies download automatically on first launch; if offline, install `pandas` / `scikit-learn` / `scipy` in the QGIS Python env manually.
 - **SAGA not available:** install/enable the **SAGA NextGen** provider in *Plugins ▶ Manage and Install…* / *Processing → Providers*.
 - **CRS:** a geographic (degrees) boundary is auto-reprojected to its UTM zone; a projected boundary is used as-is. Resolution is always in meters.
 - **Export errors:** choose an **export folder** first (button on the PCA page).
+
+---
+
+## Citation
+
+Any published work using this plugin **must cite**:
+
+> Melo, D. D., Cunha, I. A., & Amaral, L. R. (2025). *Precision Zones: An Open-Source QGIS Plugin for Management-Zone Segmentation in Precision Agriculture.* AgriEngineering, 7(12), 420. https://www.mdpi.com/2624-7402/7/12/420 — DOI: [10.3390/agriengineering7120420](https://doi.org/10.3390/agriengineering7120420)
 
 ---
 
