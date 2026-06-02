@@ -25,7 +25,7 @@ except Exception:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-from ..core.i18n import tr
+from ..core.i18n import tr, qgis_locale_lang
 from ..core.qt_compat import set_multiselection
 from .sidebar import Sidebar, PAGES
 from .styles import (
@@ -224,6 +224,10 @@ class PrecisionZonesDialog(QDialog):
         browser.setOpenExternalLinks(True)
         plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         intro_path = os.path.join(plugin_dir, "intro.html")
+        if qgis_locale_lang() == "pt":
+            pt = os.path.join(plugin_dir, "intro_pt_br.html")
+            if os.path.exists(pt):
+                intro_path = pt
         try:
             with open(intro_path, "r", encoding="utf-8") as f:
                 browser.setHtml(f.read())

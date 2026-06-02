@@ -26,6 +26,17 @@ def tr(message: str) -> str:
     return QCoreApplication.translate(CONTEXT, message)
 
 
+def qgis_locale_lang() -> str:
+    """Two-letter QGIS UI locale (e.g. 'pt', 'en'); 'en' if unavailable."""
+    try:
+        if QgsSettings is not None:
+            locale = QgsSettings().value("locale/userLocale", "en_US") or "en_US"
+            return locale[:2].lower()
+    except Exception:
+        pass
+    return "en"
+
+
 def install_translator(plugin_dir: str):
     """Load and install the .qm matching the QGIS UI locale (if any).
 

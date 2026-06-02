@@ -33,6 +33,7 @@ INCLUDE_FILES = [
     "icon.png",
     "resources_rc.py",
     "intro.html",
+    "intro_pt_br.html",
     "README.md",
     "LICENSE",
 ]
