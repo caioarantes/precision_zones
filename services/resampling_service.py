@@ -38,6 +38,7 @@ class ResampleResult:
     n_removed: int
     zero_var_cols: list
     target_crs_authid: str               # working CRS (auto-UTM if input was geographic)
+    reprojected: bool = False            # True when a geographic boundary was auto-reprojected to UTM
 
 
 def resample_and_extract(contorno_layer, rasters, resolucao: float,
@@ -60,7 +61,9 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
 
     # 0) auto-reproject a geographic boundary to its appropriate UTM CRS so the
     #    resolution (meters) and metric grid are well defined.
+    reprojected = False
     if contorno_layer.crs().isGeographic():
+        reprojected = True
         utm = estimate_utm_crs(contorno_layer)
         _say(tr("Reprojecting"),
              tr("Boundary in degrees — reprojecting to {}.").format(utm.authid()))
@@ -274,5 +277,5 @@ def resample_and_extract(contorno_layer, rasters, resolucao: float,
         referencia_raster=referencia_raster,
         matriz_variaveis_originais=matriz, colunas_variaveis_originais=colunas,
         n_removed=n_removed, zero_var_cols=zero_var_cols,
-        target_crs_authid=target_crs_authid,
+        target_crs_authid=target_crs_authid, reprojected=reprojected,
     )

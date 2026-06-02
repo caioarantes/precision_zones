@@ -763,5 +763,113 @@ Camada criada: {}</translation>
         <source>Run PCA first or select 'Original variables'.</source>
         <translation>Execute a PCA antes ou selecione 'Variáveis originais'.</translation>
     </message>
+    <message>
+        <source>Boundary was in degrees — auto-reprojected to {}.</source>
+        <translation>O contorno estava em graus — reprojetado automaticamente para {}.</translation>
+    </message>
+    <message>
+        <source>Boundary layer</source>
+        <translation>Camada de contorno</translation>
+    </message>
+    <message>
+        <source>Polygon outline of the field (any CRS).</source>
+        <translation>Contorno poligonal do talhão (qualquer CRS).</translation>
+    </message>
+    <message>
+        <source>Input rasters</source>
+        <translation>Rasters de entrada</translation>
+    </message>
+    <message>
+        <source>Select one or more — Ctrl/Shift for multiple.</source>
+        <translation>Selecione um ou mais — Ctrl/Shift para múltiplos.</translation>
+    </message>
+    <message>
+        <source>Resolution (m)</source>
+        <translation>Resolução (m)</translation>
+    </message>
+    <message>
+        <source>e.g. 10</source>
+        <translation>ex.: 10</translation>
+    </message>
+    <message>
+        <source>Output pixel size in meters; use your finest raster as reference.</source>
+        <translation>Tamanho do pixel de saída em metros; use o raster de maior resolução como referência.</translation>
+    </message>
+    <message>
+        <source>Polygon layer outlining the field. Any CRS — a geographic boundary is auto-reprojected to its UTM zone.</source>
+        <translation>Camada poligonal que delimita o talhão. Qualquer CRS — um contorno geográfico é reprojetado automaticamente para sua zona UTM.</translation>
+    </message>
+    <message>
+        <source>Pick one or more rasters to combine. Hold Ctrl or Shift to multi-select.</source>
+        <translation>Escolha um ou mais rasters para combinar. Use Ctrl ou Shift para seleção múltipla.</translation>
+    </message>
+    <message>
+        <source>Output pixel size in meters. Match your highest-resolution raster.</source>
+        <translation>Tamanho do pixel de saída em metros. Use o raster de maior resolução.</translation>
+    </message>
+    <message>
+        <source>Principal component to write as a single-band raster.</source>
+        <translation>Componente principal a gravar como raster de banda única.</translation>
+    </message>
+    <message>
+        <source>How many principal components feed the clustering.</source>
+        <translation>Quantas componentes principais alimentam a clusterização.</translation>
+    </message>
+    <message>
+        <source>Smallest number of clusters (k) to evaluate.</source>
+        <translation>Menor número de clusters (k) a avaliar.</translation>
+    </message>
+    <message>
+        <source>Largest number of clusters (k) to evaluate.</source>
+        <translation>Maior número de clusters (k) a avaliar.</translation>
+    </message>
+    <message>
+        <source>Evaluates every k in this range with Elbow + Silhouette.</source>
+        <translation>Avalia cada k nessa faixa com Elbow + Silhueta.</translation>
+    </message>
+    <message>
+        <source>Final k — the number of management zones in the output raster.</source>
+        <translation>k final — o número de zonas de manejo no raster de saída.</translation>
+    </message>
+    <message>
+        <source>Pick k from the Elbow/Silhouette results above.</source>
+        <translation>Escolha k a partir dos resultados de Elbow/Silhueta acima.</translation>
+    </message>
+    <message>
+        <source>Zones raster to smooth</source>
+        <translation>Raster de zonas a suavizar</translation>
+    </message>
+    <message>
+        <source>The management-zones raster to smooth (e.g. one just generated).</source>
+        <translation>O raster de zonas de manejo a suavizar (ex.: um recém-gerado).</translation>
+    </message>
+    <message>
+        <source>Filter radius in pixels; larger = smoother, fewer speckles.</source>
+        <translation>Raio do filtro em pixels; maior = mais suave, menos ruído.</translation>
+    </message>
+    <message>
+        <source>Zones raster to summarize per zone.</source>
+        <translation>Raster de zonas para resumir por zona.</translation>
+    </message>
+    <message>
+        <source>CSV with coordinate columns and the attribute to analyze.</source>
+        <translation>CSV com colunas de coordenadas e o atributo a analisar.</translation>
+    </message>
+    <message>
+        <source>Map the CSV columns below after loading.</source>
+        <translation>Mapeie as colunas do CSV abaixo após carregar.</translation>
+    </message>
+    <message>
+        <source>CSV column holding the X / longitude coordinate.</source>
+        <translation>Coluna do CSV com a coordenada X / longitude.</translation>
+    </message>
+    <message>
+        <source>CSV column holding the Y / latitude coordinate.</source>
+        <translation>Coluna do CSV com a coordenada Y / latitude.</translation>
+    </message>
+    <message>
+        <source>CSV column with the numeric value to summarize per zone.</source>
+        <translation>Coluna do CSV com o valor numérico a resumir por zona.</translation>
+    </message>
 </context>
 </TS>

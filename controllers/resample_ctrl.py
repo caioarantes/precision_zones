@@ -82,6 +82,8 @@ class ResampleController:
         ses.matriz_variaveis_originais = result.matriz_variaveis_originais
         ses.colunas_variaveis_originais = result.colunas_variaveis_originais
 
-        self.notifier.info(
-            dlg, tr("Step completed"),
-            tr("Data resampled, extracted and stored in memory (with cleaning) successfully!"))
+        msg = tr("Data resampled, extracted and stored in memory (with cleaning) successfully!")
+        if result.reprojected:
+            msg += "\n\n" + tr("Boundary was in degrees — auto-reprojected to {}.").format(
+                result.target_crs_authid)
+        self.notifier.info(dlg, tr("Step completed"), msg)
