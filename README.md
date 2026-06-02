@@ -8,7 +8,7 @@
 
 ## Requirements
 
-- **QGIS 3.34 LTR or newer** (developed/tested on QGIS **3.44 LTR**, bundled **Python 3.12**, Windows).
+- **QGIS 3.34 LTR or newer** (developed/tested on QGIS **3.44 LTR**, bundled **Python 3.12**). Prebuilt dependency bundles cover Windows, Linux and macOS across Python 3.9–3.12; other setups use the automatic pip fallback.
 - **SAGA provider** enabled in QGIS — only for the majority (mode) filter. Install the *Processing Saga NextGen Provider* plugin via **Plugins ▶ Manage and Install…**.
 - GDAL / Processing — included with QGIS.
 - Python deps `pandas`, `scikit-learn`, `scipy` — **downloaded automatically** on first launch (see below). `numpy` and `matplotlib` ship with QGIS.
@@ -21,7 +21,9 @@ Third-party packages not bundled with QGIS (`pandas`, `scikit-learn`, `scipy`) a
 2. **Runtime pip** — runs the QGIS Python's `pip` to install `requirements.txt` into `extlibs/` (works on any Python/OS with internet); `numpy`/`matplotlib` are dropped afterward since QGIS provides them.
 3. **Manual** — if both fail, install `pandas scikit-learn scipy` in the QGIS Python yourself.
 
-The active build is recorded in `extlibs/.ready` with its tag; a QGIS Python upgrade re-provisions automatically. Prebuilt zips are currently provided for Windows (per Python version); other platforms use the pip fallback until their zip is published.
+The active build is recorded in `extlibs/.ready` with its tag; a QGIS Python upgrade re-provisions automatically. Prebuilt zips are published for Windows (cp39–cp312), Linux (cp310–cp312) and macOS (cp312); any combination without a prebuilt zip uses the pip fallback. New bundles are produced by the **Build extlibs** GitHub Actions workflow.
+
+You can also check/install dependencies from the plugin's **Intro page**: status chips for pandas / scikit-learn / scipy / SAGA, an **Install dependencies** button, and a **Manual install…** dialog with the exact `pip` command.
 
 ---
 
@@ -60,7 +62,7 @@ The active build is recorded in `extlibs/.ready` with its tag; a QGIS Python upg
 - **From ZIP**
   1. Build the package: `python-qgis-ltr build_plugin.py` → `dist/precision_zones.zip` (or zip the `precision_zones/` folder manually).
   2. QGIS → **Plugins → Install from ZIP** → select the `.zip`.
-  3. On first launch the plugin downloads `extlibs.zip` (pandas/scikit-learn/scipy).
+  3. On first launch the plugin provisions its dependencies (matching prebuilt bundle, else pip).
 
 - **From the Official QGIS Plugin Repository**
   Once published, search for **“Precision Zones”** in the QGIS plugin manager.
@@ -69,10 +71,11 @@ The active build is recorded in `extlibs/.ready` with its tag; a QGIS Python upg
 
 ## UI overview
 
-The dialog uses a **navigation sidebar** (hover to expand) with one page per step, plus a fixed **Back / Next** bar at the bottom to step through the workflow:
+The dialog is a resizable, non-modal window (minimize/maximize/close) with a **navigation sidebar** (hover to expand) and a fixed **Back / Next** bar to step through the workflow:
 
-**Resampling · PCA · Zones · Mode Filter · Analysis**
+**Intro · Resampling · PCA · Zones · Mode Filter · Analysis**
 
+0. **Intro** — overview, features, the required citation, and a live dependency panel (install / recheck / manual install).
 1. **Resampling** — pick the boundary vector (any CRS; a geographic/degrees boundary is **auto-reprojected to its appropriate UTM zone**), select rasters, set resolution (m/pixel) → centroids + extracted values, cleaned in memory.
 2. **PCA** — Run PCA; inspect explained/cumulative variance; export CSVs or PC rasters.
 3. **Zones** — choose PCA (n PCs) or original variables; set k-range → Elbow + Silhouette; export PNG/CSV; set final k → **Generate Zones** (GeoTIFF added to project).
@@ -103,7 +106,10 @@ precision_zones/
   services/             # pure backend: resampling, pca, clustering, zones, filter, variance, export
   view/                 # UI only: main_dialog (header + sidebar + stacked pages), sidebar, styles
   controllers/          # one per page: orchestrate view <-> services
-  extlibs_manager.py    # downloads/extracts extlibs.zip on first run
+  extlibs_manager.py    # provisions the matching extlibs-<tag>.zip (or pip) on first run
+  intro.html / intro_pt_br.html   # Intro page content
+  i18n/                 # Qt .ts/.qm translations
+  .github/workflows/    # CI: build extlibs bundles
 ```
 
 ---
@@ -115,6 +121,7 @@ Helper scripts (run with QGIS' Python, e.g. `python-qgis-ltr`):
 - **`build_plugin.py`** — compiles translations and packages the runtime code into `dist/precision_zones.zip` (deps excluded; fetched at runtime).
 - **`compile_translations.py`** — compiles `i18n/*.ts` → `*.qm` (pure Python, no `lrelease`). Run after editing any `.ts`.
 - **`build_extlibs_zip.py`** — run with **no args** under a target QGIS Python to build `extlibs-<tag>.zip` (e.g. `extlibs-cp312-win_amd64.zip`) for that interpreter; pip-installs deps, strips numpy/matplotlib, zips. To support another QGIS version, run it under that QGIS's Python and commit + push the resulting `extlibs-<tag>.zip`. (Two-arg mode zips an existing `pip --target` dir.)
+- **Build extlibs (GitHub Actions)** — `Actions ▶ Build extlibs ▶ Run workflow` builds the bundles across a Windows/Linux/macOS × Python matrix; enable the **commit** input to push the resulting `extlibs-<tag>.zip` files to `main` automatically (no need to have every QGIS installed locally).
 
 Adding a language: copy an existing `i18n/precision_zones_<lang>.ts`, translate the `<translation>` entries (keep `{}` placeholders), run `compile_translations.py`, and map the locale in `core/i18n.install_translator` if its two-letter code differs (e.g. `pt`→`pt_BR`).
 
