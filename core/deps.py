@@ -35,3 +35,19 @@ def try_pandas():
         return pd
     except Exception:
         return None
+
+
+# (display name, import module) for the Python deps shipped via extlibs.
+PY_DEPS = (("pandas", "pandas"), ("scikit-learn", "sklearn"), ("scipy", "scipy"))
+
+
+def check_imports() -> dict:
+    """Return {display_name: importable_bool} for the bundled Python deps."""
+    res = {}
+    for name, mod in PY_DEPS:
+        try:
+            __import__(mod)
+            res[name] = True
+        except Exception:
+            res[name] = False
+    return res

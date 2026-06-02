@@ -871,5 +871,57 @@ Couche créée : {}</translation>
         <source>CSV column with the numeric value to summarize per zone.</source>
         <translation>Colonne du CSV avec la valeur numérique à résumer par zone.</translation>
     </message>
+    <message>
+        <source>Dependencies</source>
+        <translation>Dépendances</translation>
+    </message>
+    <message>
+        <source>Install dependencies</source>
+        <translation>Installer les dépendances</translation>
+    </message>
+    <message>
+        <source>Recheck</source>
+        <translation>Revérifier</translation>
+    </message>
+    <message>
+        <source>Installing…</source>
+        <translation>Installation…</translation>
+    </message>
+    <message>
+        <source>Dependencies installed.</source>
+        <translation>Dépendances installées.</translation>
+    </message>
+    <message>
+        <source>Could not install dependencies.</source>
+        <translation>Impossible d'installer les dépendances.</translation>
+    </message>
+    <message>
+        <source>pandas/scikit-learn/scipy install automatically; SAGA needs the 'Processing Saga NextGen Provider' plugin (for the Mode Filter).</source>
+        <translation>pandas/scikit-learn/scipy s'installent automatiquement ; SAGA nécessite le module 'Processing Saga NextGen Provider' (pour le Filtre de mode).</translation>
+    </message>
+    <message>
+        <source>Manual install…</source>
+        <translation>Installation manuelle…</translation>
+    </message>
+    <message>
+        <source>Manual installation</source>
+        <translation>Installation manuelle</translation>
+    </message>
+    <message>
+        <source>If automatic install fails, run this in the OSGeo4W Shell (Windows) or your QGIS Python environment:</source>
+        <translation>Si l'installation automatique échoue, exécutez ceci dans l'OSGeo4W Shell (Windows) ou votre environnement Python QGIS :</translation>
+    </message>
+    <message>
+        <source>Copy command</source>
+        <translation>Copier la commande</translation>
+    </message>
+    <message>
+        <source>SAGA: install the 'Processing Saga NextGen Provider' plugin via Plugins ▶ Manage and Install… (needed only for the Mode Filter).</source>
+        <translation>SAGA : installez l'extension 'Processing Saga NextGen Provider' via Extensions ▶ Installer/Gérer… (nécessaire uniquement pour le Filtre de mode).</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
 </context>
 </TS>

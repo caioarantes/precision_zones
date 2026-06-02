@@ -9,11 +9,12 @@ controllers/ which connect to this dialog's widgets by name.
 import os
 
 from qgis.PyQt.QtCore import Qt, QUrl
-from qgis.PyQt.QtGui import QDesktopServices
+from qgis.PyQt.QtGui import QDesktopServices, QGuiApplication
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
     QListWidget, QLineEdit, QTableWidget, QWidget, QSpinBox, QGroupBox,
     QRadioButton, QStackedWidget, QScrollArea, QFrame, QTextBrowser,
+    QPlainTextEdit,
 )
 
 from qgis.core import QgsProject, QgsRasterLayer
@@ -26,7 +27,7 @@ except Exception:
 from matplotlib.figure import Figure
 
 from ..core.i18n import tr, qgis_locale_lang
-from ..core.qt_compat import set_multiselection
+from ..core.qt_compat import set_multiselection, exec_dialog
 from .sidebar import Sidebar, PAGES
 from .styles import (
     STYLE_DIALOG, STYLE_PAGE, STYLE_BTN_PRIMARY, STYLE_BTN_SECONDARY, STYLE_BTN_HELP,
@@ -247,9 +248,114 @@ class PrecisionZonesDialog(QDialog):
                 browser.setHtml(f.read())
         except Exception:
             browser.setHtml("<h1>Precision Zones</h1>")
-        outer.addWidget(browser)
+        outer.addWidget(browser, 1)
+
+        # --- Dependencies status panel (live, replaces the old checklist) ---
+        panel = QFrame()
+        panel.setObjectName("pzPanel")
+        pl = QVBoxLayout(panel)
+        pl.setContentsMargins(14, 10, 14, 12)
+        pl.setSpacing(8)
+
+        pl.addWidget(self._field(tr("Dependencies")))
+
+        chips = QHBoxLayout()
+        chips.setSpacing(8)
+        self._dep_chips = {}
+        for name in ("pandas", "scikit-learn", "scipy", "SAGA"):
+            chip = QLabel(name)
+            chip.setToolTip(name)
+            self._dep_chips[name] = chip
+            chips.addWidget(chip)
+        chips.addStretch()
+        pl.addLayout(chips)
+        self._set_chip_states({})  # neutral until checked
+
+        self.depsHint = self._hint(tr(
+            "pandas/scikit-learn/scipy install automatically; SAGA needs the "
+            "'Processing Saga NextGen Provider' plugin (for the Mode Filter)."))
+        pl.addWidget(self.depsHint)
+
+        row = QHBoxLayout()
+        self.btnDepsInstall = self._primary(QPushButton(tr("Install dependencies")))
+        self.btnDepsRecheck = self._secondary(QPushButton(tr("Recheck")))
+        self.btnDepsManual = self._secondary(QPushButton(tr("Manual install…")))
+        self.btnDepsManual.clicked.connect(self._show_manual_install)
+        row.addWidget(self.btnDepsInstall)
+        row.addWidget(self.btnDepsRecheck)
+        row.addWidget(self.btnDepsManual)
+        row.addStretch()
+        pl.addLayout(row)
+
+        outer.addWidget(panel)
         self.introBrowser = browser
         return page
+
+    # -- dependency panel helpers (driven by DepsController) -------------
+    @staticmethod
+    def _chip_style(state):
+        # state: 'ok' | 'missing' | 'neutral'
+        colors = {
+            "ok": ("#1b5e20", "#e8f5e9", "#a5d6a7"),
+            "missing": ("#b71c1c", "#fdecea", "#f5c6c2"),
+            "neutral": ("#616161", "#f0f0f0", "#e0e0e0"),
+        }
+        fg, bg, br = colors.get(state, colors["neutral"])
+        return (f"QLabel {{ color:{fg}; background:{bg}; border:1px solid {br}; "
+                f"border-radius:10px; padding:2px 10px; font-size:11px; font-weight:bold; }}")
+
+    def _set_chip_states(self, states: dict):
+        for name, chip in self._dep_chips.items():
+            st = states.get(name, "neutral")
+            mark = {"ok": "✓ ", "missing": "✗ ", "neutral": ""}.get(st, "")
+            chip.setText(mark + name)
+            chip.setStyleSheet(self._chip_style(st))
+
+    def set_dep_status(self, imports: dict, saga: bool):
+        """imports: {name: bool} for pandas/scikit-learn/scipy; saga: bool."""
+        states = {n: ("ok" if ok else "missing") for n, ok in imports.items()}
+        states["SAGA"] = "ok" if saga else "missing"
+        self._set_chip_states(states)
+        py_ok = all(imports.values()) if imports else False
+        if hasattr(self, "btnDepsInstall"):
+            self.btnDepsInstall.setVisible(not py_ok)
+
+    def set_deps_installing(self, busy: bool):
+        self.btnDepsInstall.setEnabled(not busy)
+        self.btnDepsInstall.setText(tr("Installing…") if busy else tr("Install dependencies"))
+
+    def _show_manual_install(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Manual installation"))
+        dlg.resize(520, 260)
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel(tr(
+            "If automatic install fails, run this in the OSGeo4W Shell (Windows) "
+            "or your QGIS Python environment:")))
+        cmd = QPlainTextEdit("python -m pip install pandas scikit-learn scipy")
+        cmd.setReadOnly(True)
+        cmd.setFixedHeight(52)
+        lay.addWidget(cmd)
+
+        copy = self._secondary(QPushButton(tr("Copy command")))
+        copy.clicked.connect(lambda: QGuiApplication.clipboard().setText(cmd.toPlainText()))
+        lay.addWidget(copy)
+
+        saga = QLabel(tr(
+            "SAGA: install the 'Processing Saga NextGen Provider' plugin via "
+            "Plugins ▶ Manage and Install… (needed only for the Mode Filter)."))
+        saga.setWordWrap(True)
+        saga.setStyleSheet("color: #607d8b; font-size: 12px;")
+        lay.addWidget(saga)
+
+        lay.addStretch()
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        close = self._secondary(QPushButton(tr("Close")))
+        close.clicked.connect(dlg.accept)
+        btn_row.addWidget(close)
+        lay.addLayout(btn_row)
+        exec_dialog(dlg)
 
     def _build_resample_page(self):
         page, card = self._new_page()

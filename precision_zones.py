@@ -22,6 +22,7 @@ from .controllers.pca_ctrl import PCAController
 from .controllers.zones_ctrl import ZonesController
 from .controllers.filter_ctrl import FilterController
 from .controllers.analysis_ctrl import AnalysisController
+from .controllers.deps_ctrl import DepsController
 
 
 class PrecisionZonesPlugin:
@@ -57,10 +58,14 @@ class PrecisionZonesPlugin:
         zones = ZonesController(self.iface, self.dialog, self.session, self.notifier)
         flt = FilterController(self.iface, self.dialog, self.session, self.notifier)
         analysis = AnalysisController(self.iface, self.dialog, self.session, self.notifier)
+        deps = DepsController(self.iface, self.dialog, self.session, self.notifier)
         # keep references alive for the dialog's lifetime
-        self._controllers = (resample, pca, zones, flt, analysis)
+        self._controllers = (resample, pca, zones, flt, analysis, deps)
 
         d = self.dialog
+        # Intro tab — dependency panel
+        d.btnDepsInstall.clicked.connect(deps.install)
+        d.btnDepsRecheck.clicked.connect(deps.refresh)
         # Resampling tab
         d.executarButton.clicked.connect(resample.run)
         # PCA tab
@@ -98,4 +103,5 @@ class PrecisionZonesPlugin:
                 d.rasterListWidget.addItem(layer.name())
 
         d.atualizar_lista_rasters()
+        deps.refresh()  # initial dependency status on the Intro page
         d.show()
