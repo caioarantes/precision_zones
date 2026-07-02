@@ -274,7 +274,7 @@ class PrecisionZonesDialog(QDialog):
         chips = QHBoxLayout()
         chips.setSpacing(8)
         self._dep_chips = {}
-        for name in ("pandas", "scikit-learn", "scipy", "SAGA"):
+        for name in ("pandas", "scikit-learn", "scipy"):
             chip = QLabel(name)
             chip.setToolTip(name)
             self._dep_chips[name] = chip
@@ -284,8 +284,7 @@ class PrecisionZonesDialog(QDialog):
         self._set_chip_states({})  # neutral until checked
 
         self.depsHint = self._hint(tr(
-            "pandas/scikit-learn/scipy install automatically; SAGA needs the "
-            "'Processing Saga NextGen Provider' plugin (for the Mode Filter)."))
+            "pandas/scikit-learn/scipy install automatically on first run."))
         pl.addWidget(self.depsHint)
 
         row = QHBoxLayout()
@@ -323,10 +322,9 @@ class PrecisionZonesDialog(QDialog):
             chip.setText(mark + name)
             chip.setStyleSheet(self._chip_style(st))
 
-    def set_dep_status(self, imports: dict, saga: bool):
-        """imports: {name: bool} for pandas/scikit-learn/scipy; saga: bool."""
+    def set_dep_status(self, imports: dict):
+        """imports: {name: bool} for pandas/scikit-learn/scipy."""
         states = {n: ("ok" if ok else "missing") for n, ok in imports.items()}
-        states["SAGA"] = "ok" if saga else "missing"
         self._set_chip_states(states)
         py_ok = all(imports.values()) if imports else False
         if hasattr(self, "btnDepsInstall"):
@@ -352,13 +350,6 @@ class PrecisionZonesDialog(QDialog):
         copy = self._secondary(QPushButton(tr("Copy command")))
         copy.clicked.connect(lambda: QGuiApplication.clipboard().setText(cmd.toPlainText()))
         lay.addWidget(copy)
-
-        saga = QLabel(tr(
-            "SAGA: install the 'Processing Saga NextGen Provider' plugin via "
-            "Plugins ▶ Manage and Install… (needed only for the Mode Filter)."))
-        saga.setWordWrap(True)
-        saga.setStyleSheet("color: #607d8b; font-size: 12px;")
-        lay.addWidget(saga)
 
         lay.addStretch()
         btn_row = QHBoxLayout()

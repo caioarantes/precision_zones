@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Mode-filter tab controller: SAGA majority filter on a zones raster."""
+"""Mode-filter tab controller: majority filter on a zones raster."""
 from qgis.core import QgsProject, QgsRasterLayer
 
 from ..core.i18n import tr
@@ -47,7 +47,7 @@ class FilterController:
             dlg.atualizar_lista_rasters()
 
             self.notifier.info(
-                dlg, tr("Majority filter (SAGA)"),
+                dlg, tr("Majority filter"),
                 tr("Filter applied.\nLayer created: {}").format(layer_name))
         except Exception as e:
             self.notifier.critical(

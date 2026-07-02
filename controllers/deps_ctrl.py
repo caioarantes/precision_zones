@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """Intro-page dependency panel: live status + install/recheck."""
-from qgis.core import QgsApplication
-
 from ..core.i18n import tr
 from ..core.deps import check_imports
 from .. import extlibs_manager
@@ -14,16 +12,9 @@ class DepsController:
         self.session = session
         self.notifier = notifier
 
-    def _saga_available(self) -> bool:
-        try:
-            reg = QgsApplication.processingRegistry()
-            return bool(reg.providerById("sagang") or reg.providerById("saga"))
-        except Exception:
-            return False
-
     def refresh(self):
         extlibs_manager.ensure_on_path()
-        self.dialog.set_dep_status(check_imports(), self._saga_available())
+        self.dialog.set_dep_status(check_imports())
 
     def install(self):
         self.dialog.set_deps_installing(True)

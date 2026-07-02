@@ -1,8 +1,9 @@
 [general]
 name=Precision Zones
-qgisMinimumVersion=3.34
-supportsQt6=true
-version=2.4.0
+qgisMinimumVersion=3.28
+qgisMaximumVersion=4.99
+supportsQt6=True
+version=2.5.0
 category=Analysis
 icon=icon.png
 author=Derlei Melo, Isabella Cunha, Lucas Amaral (FEAGRI - UNICAMP)
@@ -15,12 +16,11 @@ about=Features:
   - Resampling & raster value extraction inside a boundary.
   - PCA with explained variance table (incl. Eigenvalue λ) and CSV export.
   - K-Means clustering with Elbow curve and Silhouette score; export indices; generate zones as a raster.
-  - Optional zone smoothing (Mode Filter): SAGA Majority/Minority.
+  - Optional zone smoothing (Mode Filter): built-in majority filter (numpy/scipy).
   - Variance Reduction analysis from zones and external points CSV; per-zone statistics and boxplots (PNG).
  
  Requirements:
   - Python packages pandas, scikit-learn and scipy are downloaded automatically on first run (no manual install needed).
-  - QGIS "Processing SAGA NextGen Provider" enabled (for the Mode Filter).
  
  How to cite / Como citar:
  ------------------------------
@@ -30,6 +30,9 @@ about=Features:
  ------------------------------
 
 changelog=
+  2.5.0
+  - Mode Filter no longer needs SAGA: majority filter is now computed in-process (numpy/scipy) on the source grid, preserving zone ids.
+  - Minimum QGIS version lowered to 3.28; verified on QGIS 3.44 (Qt5) and 4.0 (Qt6).
   2.4.0
   - Proper internationalization (Qt .ts/.qm); English is now the source language and the UI follows the QGIS locale.
   - Translations: English, Portuguese (pt_BR), Spanish, French, Italian (full); Hindi and Chinese (partial, falling back to English).
@@ -53,7 +56,7 @@ homepage=https://github.com/Derleimelo/Precision-Zones-Plugin
 repository=https://github.com/Derleimelo/Precision-Zones-Plugin
 tracker=https://github.com/Derleimelo/Precision-Zones-Plugin/issues
 
-tags=precision agriculture;management zones;PCA;K-Means;clustering;elbow;silhouette;resampling;variance reduction;mode filter;SAGA;raster;analysis
+tags=precision agriculture;management zones;PCA;K-Means;clustering;elbow;silhouette;resampling;variance reduction;mode filter;raster;analysis
 
 experimental=False
 deprecated=False

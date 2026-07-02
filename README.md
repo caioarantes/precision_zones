@@ -1,6 +1,6 @@
 # Precision Zones (QGIS Plugin)
 
-**Precision Zones** streamlines end-to-end **Management Zone** delineation in QGIS: raster preprocessing, value extraction, PCA, Elbow/K-Means analysis, zone raster generation, majority (mode) filtering with SAGA, and per-zone statistics including **Variance Reduction (VR%)** and **boxplots**.
+**Precision Zones** streamlines end-to-end **Management Zone** delineation in QGIS: raster preprocessing, value extraction, PCA, Elbow/K-Means analysis, zone raster generation, majority (mode) filtering, and per-zone statistics including **Variance Reduction (VR%)** and **boxplots**.
 
 > UI language: **English by default**, following the QGIS UI locale (`Settings ▶ Options ▶ General`). Bundled translations: English (source), Portuguese (pt_BR), Spanish, French, Italian — plus partial Hindi and Chinese (untranslated strings fall back to English). Translations use Qt `.ts`/`.qm` under `i18n/`; rebuild with `python compile_translations.py`.
 
@@ -8,8 +8,7 @@
 
 ## Requirements
 
-- **QGIS 3.34 LTR or newer** (developed/tested on QGIS **3.44 LTR**, bundled **Python 3.12**). Prebuilt dependency bundles cover Windows, Linux and macOS across Python 3.9–3.12; other setups use the automatic pip fallback.
-- **SAGA provider** enabled in QGIS — only for the majority (mode) filter. Install the *Processing Saga NextGen Provider* plugin via **Plugins ▶ Manage and Install…**.
+- **QGIS 3.28 or newer**, including Qt6-based QGIS 4.x (verified on QGIS **3.44 LTR** and **4.0**). Prebuilt dependency bundles cover Windows, Linux and macOS across Python 3.9–3.12; other setups use the automatic pip fallback.
 - GDAL / Processing — included with QGIS.
 - Python deps `pandas`, `scikit-learn`, `scipy` — **downloaded automatically** on first launch (see below). `numpy` and `matplotlib` ship with QGIS.
 
@@ -23,7 +22,7 @@ Third-party packages not bundled with QGIS (`pandas`, `scikit-learn`, `scipy`) a
 
 The active build is recorded in `extlibs/.ready` with its tag; a QGIS Python upgrade re-provisions automatically. Prebuilt zips are published for Windows (cp39–cp312), Linux (cp310–cp312) and macOS (cp312); any combination without a prebuilt zip uses the pip fallback. New bundles are produced by the **Build extlibs** GitHub Actions workflow.
 
-You can also check/install dependencies from the plugin's **Intro page**: status chips for pandas / scikit-learn / scipy / SAGA, an **Install dependencies** button, and a **Manual install…** dialog with the exact `pip` command.
+You can also check/install dependencies from the plugin's **Intro page**: status chips for pandas / scikit-learn / scipy, an **Install dependencies** button, and a **Manual install…** dialog with the exact `pip` command.
 
 ---
 
@@ -46,9 +45,9 @@ You can also check/install dependencies from the plugin's **Intro page**: status
 - **Zone raster generation**
   - K-Means clustering (PCs or originals), rasterized to an aligned **GeoTIFF** (UInt16) on the reference grid.
 
-- **Majority filter (SAGA)**
-  - `sagang:majorityminorityfilter` / `saga:majorityfilter` (auto-detected).
-  - **Aligns** output to the original grid (GDAL Warp) without inflating areas; **preserves zone IDs** via overlap-based remapping.
+- **Majority filter (built-in)**
+  - Circular-kernel modal filter computed in-process with numpy/scipy — no SAGA provider needed.
+  - Runs directly on the source grid, so zone IDs and alignment are preserved by construction.
 
 - **Per-zone analysis**
   - Read external CSV (X, Y, attribute) and map points to zones via geotransform.
@@ -79,7 +78,7 @@ The dialog is a resizable, non-modal window (minimize/maximize/close) with a **n
 1. **Resampling** — pick the boundary vector (any CRS; a geographic/degrees boundary is **auto-reprojected to its appropriate UTM zone**), select rasters, set resolution (m/pixel) → centroids + extracted values, cleaned in memory.
 2. **PCA** — Run PCA; inspect explained/cumulative variance; export CSVs or PC rasters.
 3. **Zones** — choose PCA (n PCs) or original variables; set k-range → Elbow + Silhouette; export PNG/CSV; set final k → **Generate Zones** (GeoTIFF added to project).
-4. **Mode Filter** — pick a zones raster, set window radius → SAGA majority filter, aligned to the grid.
+4. **Mode Filter** — pick a zones raster, set window radius → built-in majority filter on the source grid.
 5. **Analysis** — load CSV (X, Y, attribute), pick the zones raster + columns → per-zone table + **total VR%**; export CSV and boxplots.
 
 ---
@@ -130,7 +129,6 @@ Adding a language: copy an existing `i18n/precision_zones_<lang>.ts`, translate 
 ## Troubleshooting
 
 - **Missing dependency:** dependencies download automatically on first launch; if offline, install `pandas` / `scikit-learn` / `scipy` in the QGIS Python env manually.
-- **SAGA not available:** install/enable the **SAGA NextGen** provider in *Plugins ▶ Manage and Install…* / *Processing → Providers*.
 - **CRS:** a geographic (degrees) boundary is auto-reprojected to its UTM zone; a projected boundary is used as-is. Resolution is always in meters.
 - **Export errors:** choose an **export folder** first (button on the PCA page).
 
